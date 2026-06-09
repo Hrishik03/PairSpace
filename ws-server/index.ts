@@ -42,6 +42,7 @@ interface Participant {
 interface Room {
   participants: Map<string, Participant>
   creatorToken: string | null
+  locked: boolean
 }
 
 const rooms = new Map<string, Room>()
@@ -79,17 +80,26 @@ io.on("connection", (socket) => {
   console.log("connected:", socket.id)
 
   // Join room
-  socket.on("room:join", ({ roomId, name, creatorToken, role = "editor" }) => {
+  socket.on("room:join", ({ roomId, name, creatorToken, role = "editor" }, callback) => {
     if (!rooms.has(roomId)) {
       rooms.set(roomId, {
         participants: new Map(),
         creatorToken: creatorToken ?? null,
+        locked: false,
       })
       startSession(roomId)
     }
 
     const room = rooms.get(roomId)!
     const isHost = room.creatorToken && room.creatorToken === creatorToken
+
+    if (room.locked && !isHost) {
+      if (typeof callback === "function") {
+        callback({ error: "Room is locked" })
+      }
+      return
+    }
+
     const assignedRole = isHost ? "host" : role
     const color = COLORS[room.participants.size % COLORS.length] ?? COLORS[0]
 
@@ -111,6 +121,10 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("participants:update",
       Array.from(room.participants.values())
     )
+
+    if (typeof callback === "function") {
+      callback({ success: true, locked: room.locked })
+    }
 
     fetch("http://localhost:3000/api/participant", {
     method: "POST",
@@ -187,7 +201,17 @@ io.on("connection", (socket) => {
     const room = rooms.get(roomId)
     if (!room) return
     if (room.creatorToken !== creatorToken) return
+    room.locked = true
     io.to(roomId).emit("room:locked", true)
+  })
+
+  // ── Unlock room (host only) ──
+  socket.on("room:unlock", ({ roomId, creatorToken }) => {
+    const room = rooms.get(roomId)
+    if (!room) return
+    if (room.creatorToken !== creatorToken) return
+    room.locked = false
+    io.to(roomId).emit("room:locked", false)
   })
 
   // ── Kick participant (host only) ──

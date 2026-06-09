@@ -41,8 +41,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Room not found" }, { status: 404 })
   }
 
+  const expiresAt = room.expiresAt.getTime()
+  const remainingSeconds = Math.max(0, Math.round((expiresAt - Date.now()) / 1000))
+
   return NextResponse.json({
     language: room.language,
     durationMinutes: room.durationMinutes,
+    expiresAt: room.expiresAt.toISOString(),
+    remainingSeconds,
   })
 }

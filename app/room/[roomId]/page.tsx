@@ -3,12 +3,11 @@ import { use, useEffect, useState, type FormEvent } from "react";
 import { useYjs } from "@/hooks/useYjs"
 import type { editor } from "monaco-editor"
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   Clock3,
   Code2,
   Copy,
-  NotebookPen,
   PauseCircle,
   PlayCircle,
   Play,
@@ -18,6 +17,7 @@ import {
 } from "lucide-react";
 import ShareModal from "@/components/room/ShareModal"
 import MonacoEditor from "@/components/editor/MonacoEditor";
+import { Suspense } from "react"
 import { Button } from "@/components/ui/button";
 import { useSocket } from "@/hooks/useSockets"
 import {
@@ -57,12 +57,21 @@ type RoomPageProps = {
 // const editorTabs = ["solution.ts", "notes.md"];
 
 
-export default function RoomPage({ params }: RoomPageProps) {
+export function RoomPageInner({ params }: RoomPageProps) {
   const { roomId } = use(params);
   const router = useRouter();
-  const searchParams = useSearchParams()
-  const roleFromUrl = searchParams.get("role") as "editor" | "viewer" | null
   const [language, setLanguage] = useState<string>("typescript")
+  const [userName, setUserName] = useState<string>(() => {
+    if (typeof window === "undefined") return ""
+    return localStorage.getItem("userName") ?? ""
+  })
+  const [joinName, setJoinName] = useState<string>("")
+  const [joinPromptOpen, setJoinPromptOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true
+    return !Boolean(localStorage.getItem("userName"))
+  })
+  const [joinLoading, setJoinLoading] = useState(false)
+  const [joinError, setJoinError] = useState("")
   const [code, setCode] = useState<string>(CODE_TEMPLATE_BY_LANGUAGE.typescript);
   const socket = useSocket()
   const [participants, setParticipants] = useState<Participant[]>([])
@@ -76,6 +85,7 @@ export default function RoomPage({ params }: RoomPageProps) {
   const [notes, setNotes] = useState<string>("")
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
   const [timerRunning, setTimerRunning] = useState(true)
+  const [roomLocked, setRoomLocked] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
 
   useEffect(() => {
@@ -88,7 +98,7 @@ export default function RoomPage({ params }: RoomPageProps) {
       }
       setLanguage(data.language)
       localStorage.setItem(`language-${roomId}`, data.language)
-      setTimeLeft(data.durationMinutes * 60)
+      setTimeLeft(typeof data.remainingSeconds === "number" ? data.remainingSeconds : data.durationMinutes * 60)
     })
 }, [roomId, router])
 
@@ -148,17 +158,28 @@ export default function RoomPage({ params }: RoomPageProps) {
   }
 
   useEffect(() => {
-    if (!socket || !roomId) return;
+    if (!socket || !roomId || !userName) return;
   
-    const userName = localStorage.getItem("userName") ?? "anonymous";
     const creatorToken = localStorage.getItem("creatorToken");
   
-    socket.emit("room:join", {
-      roomId,
-      name: userName,
-      creatorToken,
-      role: creatorToken ? "host" : (roleFromUrl ?? "editor"),
-    });
+    socket.emit(
+      "room:join",
+      {
+        roomId,
+        name: userName,
+        creatorToken: creatorToken ?? undefined,
+        role: creatorToken ? "host" : "editor",
+      },
+      (response: { error?: string; locked?: boolean }) => {
+        if (response?.error) {
+          router.push("/")
+          return
+        }
+        if (response?.locked) {
+          setRoomLocked(true)
+        }
+      }
+    )
   
     socket.on("participants:update", (data: Participant[]) => {
       console.log("participants data:", data)
@@ -188,6 +209,11 @@ export default function RoomPage({ params }: RoomPageProps) {
 
     socket.on("timer:paused", () => setTimerRunning(false))
     socket.on("timer:resumed", () => setTimerRunning(true))
+    socket.on("room:locked", (locked: boolean) => setRoomLocked(locked))
+    socket.on("room:kicked", () => {
+      socket.disconnect()
+      router.push("/")
+    })
 
     // socket.off("notes:changed")
   
@@ -199,8 +225,10 @@ export default function RoomPage({ params }: RoomPageProps) {
       socket.off("notes:changed");
       socket.off("timer:paused");
       socket.off("timer:resumed");
+      socket.off("room:locked");
+      socket.off("room:kicked");
     };
-  }, [socket, roomId]);
+  }, [socket, roomId, router, userName]);
 
    useEffect(() => {
      if (timeLeft === null) return
@@ -218,32 +246,73 @@ export default function RoomPage({ params }: RoomPageProps) {
      }, 1000)
 
      return () => clearInterval(interval)
-   }, [timeLeft === null, timerRunning])
+   }, [timerRunning, timeLeft])
 
   const myParticipant = participants.find(p => p.id === socket?.id)
+  const isHost = myParticipant?.role === "host"
 
   const languageLabel = LANGUAGE_LABELS.find((label) => LANGUAGE_VALUE_BY_LABEL[label] === language) ?? language
 
-  const userName = typeof window !== "undefined"
-  ? localStorage.getItem("userName") ?? "anonymous"
-  : "anonymous"
+  const userNameForYjs = userName || (typeof window !== "undefined" ? localStorage.getItem("userName") ?? "anonymous" : "anonymous")
 
-const { bindEditor } = useYjs({
-  roomId,
-  language,
-  userName,
-  userColor: myParticipant?.color ?? "#5b7fff",
-})
+  const { bindEditor } = useYjs({
+    roomId,
+    language,
+    userName: userNameForYjs,
+    userColor: myParticipant?.color ?? "#5b7fff",
+  })
 
   
   const handleEditorMount = (monacoEditor: editor.IStandaloneCodeEditor) => {
     bindEditor(monacoEditor)
   }
 
+  const handleLockRoom = () => {
+    const creatorToken = localStorage.getItem("creatorToken")
+    if (!creatorToken || !socket) return
+
+    if (roomLocked) {
+      socket.emit("room:unlock", { roomId, creatorToken })
+      setRoomLocked(false)
+    } else {
+      socket.emit("room:lock", { roomId, creatorToken })
+      setRoomLocked(true)
+    }
+  }
+
+  const handleKickParticipant = (targetId: string) => {
+    const creatorToken = localStorage.getItem("creatorToken")
+    if (!creatorToken || !socket) return
+
+    socket.emit("room:kick", { roomId, creatorToken, targetId })
+  }
+
+  const handleRoleChange = (targetId: string, newRole: "editor" | "viewer") => {
+    const creatorToken = localStorage.getItem("creatorToken")
+    if (!creatorToken || !socket) return
+
+    socket.emit("role:change", { roomId, creatorToken, targetId, newRole })
+  }
+
+  const handleJoinSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const trimmed = joinName.trim()
+    if (!trimmed) {
+      setJoinError("Enter a display name.")
+      return
+    }
+
+    setJoinLoading(true)
+    localStorage.setItem("userName", trimmed)
+    setUserName(trimmed)
+    setJoinPromptOpen(false)
+    setJoinLoading(false)
+  }
+
   return (
     <main className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
       <header className="border-b border-zinc-800 bg-zinc-900">
-        <div className="mx-auto flex w-full max-w-[1700px] flex-wrap items-center gap-2 px-3 py-2 md:px-5">
+        <div className="mx-auto flex w-full max-w-425 flex-wrap items-center gap-2 px-3 py-2 md:px-5">
           <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold">
             <Code2 className="size-4 text-blue-400" />
             PairSpace
@@ -312,6 +381,16 @@ const { bindEditor } = useYjs({
             <span className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
              {myParticipant?.role ?? "connecting..."}
             </span>
+            {isHost && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleLockRoom}
+                className="cursor-pointer h-8 border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
+              >
+                {roomLocked ? "Unlock room" : "Lock room"}
+              </Button>
+            )}
             <Button size="sm"
              variant="outline"
              onClick={() => setShareOpen(true)}
@@ -327,7 +406,36 @@ const { bindEditor } = useYjs({
         </div>
       </header>
 
-      <section className="mx-auto grid w-full max-w-[1700px] flex-1 gap-3 p-3 md:grid-cols-[1fr_340px]">
+      {joinPromptOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/95 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6 shadow-xl">
+            <h2 className="text-lg font-semibold text-zinc-100">Enter your display name</h2>
+            <p className="mt-2 text-sm text-zinc-400">This name will appear for other participants in the room.</p>
+            <form onSubmit={handleJoinSubmit} className="mt-4 space-y-4">
+              <label className="block text-sm text-zinc-300">
+                <span className="sr-only">Display name</span>
+                <input
+                  value={joinName}
+                  onChange={(event) => {
+                    setJoinName(event.target.value)
+                    if (joinError) setJoinError("")
+                  }}
+                  placeholder="Your display name"
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-500"
+                />
+              </label>
+              {joinError && <p className="text-sm text-red-400">{joinError}</p>}
+              <div className="flex justify-end">
+                <Button type="submit" disabled={joinLoading} className="h-10">
+                  {joinLoading ? "Joining..." : "Join room"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <section className="mx-auto grid w-full max-w-425 flex-1 gap-3 p-3 md:grid-cols-[1fr_340px]">
         <div className="grid min-h-[75vh] grid-rows-[auto_auto_1fr_auto] rounded-xl border border-zinc-800 bg-zinc-900">
 
           <div className="flex items-end gap-1 border-b border-zinc-800 bg-zinc-900/80 px-3 pt-2">
@@ -405,7 +513,7 @@ const { bindEditor } = useYjs({
           <div className="flex items-center justify-between border-t border-zinc-800 px-3 py-1">
             <div className="flex items-center gap-2 text-xs text-zinc-500">
               <Users className="size-4" />
-              3 participants online
+              {participants.length} participant{participants.length === 1 ? "" : "s"} online
             </div>
             <span className="text-xs text-zinc-500">Ln 6, Col 34</span>
           </div>
@@ -477,7 +585,7 @@ const { bindEditor } = useYjs({
                     value={stdin}
                     onChange={(event) => setStdin(event.target.value)}
                     placeholder="Enter input for your program"
-                    className="min-h-[100px] w-full resize-none rounded-md border border-zinc-800 bg-zinc-900 p-2 text-xs text-zinc-100 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                    className="min-h-25 w-full resize-none rounded-md border border-zinc-800 bg-zinc-900 p-2 text-xs text-zinc-100 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
                   />
                 </div>
               </div>
@@ -521,34 +629,57 @@ const { bindEditor } = useYjs({
           <div className="border-t border-zinc-800 p-3">
             <p className="mb-2 text-[10px] uppercase tracking-wide text-zinc-500">Participants</p>
             <div className="space-y-2 text-xs">
-              {participants.map((p) => (
-                <div key={p.id} className="flex items-center gap-2">
-                  <span
-                    className="flex size-6 items-center justify-center rounded-full text-[10px] font-semibold text-zinc-100"
-                    style={{ backgroundColor: p.color }}
-                  >
-                    {p.name.charAt(0).toUpperCase()}
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-zinc-200">
-                      {p.name}
-                      {p.id === socket?.id && (
-                        <span className="ml-1 text-zinc-500">(you)</span>
-                      )}
-                    </p>
-                    <p className={`text-xs ${
-                      p.status === "typing..."
-                        ? "text-emerald-400"
-                        : "text-zinc-500"
-                    }`}>
-                      {p.status || "online"}
-                    </p>
+              {participants.map((p) => {
+                const showHostActions = isHost && p.id !== socket?.id && p.role !== "host"
+
+                return (
+                  <div key={p.id} className="flex flex-wrap items-center gap-2">
+                    <span
+                      className="flex size-6 items-center justify-center rounded-full text-[10px] font-semibold text-zinc-100"
+                      style={{ backgroundColor: p.color }}
+                    >
+                      {p.name.charAt(0).toUpperCase()}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-zinc-200 truncate">
+                        {p.name}
+                        {p.id === socket?.id && (
+                          <span className="ml-1 text-zinc-500">(you)</span>
+                        )}
+                      </p>
+                      <p className={`text-xs ${
+                        p.status === "typing..."
+                          ? "text-emerald-400"
+                          : "text-zinc-500"
+                      }`}>
+                        {p.status || "online"}
+                      </p>
+                    </div>
+                    <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">
+                      {p.role}
+                    </span>
+                    {showHostActions && (
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={p.role}
+                          onChange={(event) => handleRoleChange(p.id, event.target.value as "editor" | "viewer")}
+                          className="h-8 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-[11px] text-zinc-200 outline-none"
+                        >
+                          <option value="editor">Editor</option>
+                          <option value="viewer">Viewer</option>
+                        </select>
+                        <Button
+                          size="xs"
+                          variant="destructive"
+                          onClick={() => handleKickParticipant(p.id)}
+                        >
+                          Kick
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                  <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">
-                    {p.role}
-                  </span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </aside>
@@ -561,4 +692,16 @@ const { bindEditor } = useYjs({
       )}
     </main>
   );
+}
+
+export default function RoomPage({ params }: RoomPageProps) {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-400">
+        Loading room...
+      </div>
+    }>
+      <RoomPageInner params={params} />
+    </Suspense>
+  )
 }
