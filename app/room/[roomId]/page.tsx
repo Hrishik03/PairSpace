@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import ShareModal from "@/components/room/ShareModal"
+import SettingsModal, { EditorSettings } from "@/components/room/SettingsModal"
 import MonacoEditor from "@/components/editor/MonacoEditor";
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,17 @@ export function RoomPageInner({ params }: RoomPageProps) {
   const [timerRunning, setTimerRunning] = useState(true)
   const [roomLocked, setRoomLocked] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => {
+    if (typeof window === "undefined") return { theme: "vs-dark", fontSize: 14, wordWrap: "on", keybindings: "standard" }
+    const saved = localStorage.getItem("editorSettings")
+    return saved ? JSON.parse(saved) : { theme: "vs-dark", fontSize: 14, wordWrap: "on", keybindings: "standard" }
+  })
+
+  const updateSettings = (newSettings: EditorSettings) => {
+    setEditorSettings(newSettings)
+    localStorage.setItem("editorSettings", JSON.stringify(newSettings))
+  }
 
   useEffect(() => {
   fetch(`/api/room?roomId=${roomId}`)
@@ -396,7 +408,12 @@ export function RoomPageInner({ params }: RoomPageProps) {
               <Copy className="size-3.5" />
               Share
             </Button>
-            <Button size="sm" variant="outline" className="h-8 border-zinc-700 bg-zinc-800 hover:bg-zinc-700">
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={() => setSettingsOpen(true)}
+              className="h-8 border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
+            >
               <Settings className="size-3.5" />
             </Button>
           </div>
@@ -487,6 +504,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
               <MonacoEditor
                 language={language}
                 value={code}
+                settings={editorSettings}
                 onChange={(value) => {
                   setCode(value ?? "")
                 }}
@@ -680,6 +698,13 @@ export function RoomPageInner({ params }: RoomPageProps) {
         <ShareModal
           roomId={roomId}
           onClose={() => setShareOpen(false)}
+        />
+      )}
+      {settingsOpen && (
+        <SettingsModal
+          settings={editorSettings}
+          onUpdate={updateSettings}
+          onClose={() => setSettingsOpen(false)}
         />
       )}
     </main>

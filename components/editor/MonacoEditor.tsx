@@ -8,10 +8,15 @@ interface Props {
     language: string,
     value: string,
     onChange: (value: string) => void,
-    onMount?: (editor: Monaco.editor.IStandaloneCodeEditor) => void
+    onMount?: (editor: Monaco.editor.IStandaloneCodeEditor) => void,
+    settings?: {
+      theme: string
+      fontSize: number
+      wordWrap: "on" | "off"
+    }
 }
 
-export default function MonacoEditor({ language, value, onChange, onMount }: Props) {
+export default function MonacoEditor({ language, value, onChange, onMount, settings }: Props) {
     const handleEditorChange = (nextValue: string | undefined) => {
       onChange(nextValue ?? "")
     }
@@ -19,17 +24,17 @@ export default function MonacoEditor({ language, value, onChange, onMount }: Pro
     return (
       <Editor
         height="100%"
-        theme="vs-dark"
+        theme={settings?.theme ?? "vs-dark"}
         language={language}
         value={value}
         onChange={handleEditorChange}
         onMount={onMount}
         options={{
-          fontSize: 14,
+          fontSize: settings?.fontSize ?? 14,
           minimap: { enabled: false },
           scrollBeyondLastLine: false,
           lineNumbers: "on",
-          wordWrap: "on",
+          wordWrap: settings?.wordWrap ?? "on",
           automaticLayout: true,
         }}
       />
