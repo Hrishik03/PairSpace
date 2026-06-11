@@ -43,9 +43,26 @@ interface Room {
   participants: Map<string, Participant>
   creatorToken: string | null
   locked: boolean
+  timerRunning: boolean
+  remainingSeconds: number
 }
 
 const rooms = new Map<string, Room>()
+
+// ── Server-side timer tick ──
+setInterval(() => {
+  rooms.forEach((room, roomId) => {
+    if (room.timerRunning && room.remainingSeconds > 0) {
+      room.remainingSeconds -= 1
+      if (room.remainingSeconds === 0) {
+        room.timerRunning = false
+        io.to(roomId).emit("timer:ended")
+      }
+      // Broadcast every second or every few seconds to keep in sync
+      io.to(roomId).emit("timer:tick", { remainingSeconds: room.remainingSeconds })
+    }
+  })
+}, 1000)
 const COLORS = ["#5b7fff", "#ff5e7a", "#ffd166", "#3dffa0", "#a78bfa", "#f97316"]
 
 // ── Save replay via Next.js API ──
@@ -80,12 +97,14 @@ io.on("connection", (socket) => {
   console.log("connected:", socket.id)
 
   // Join room
-  socket.on("room:join", ({ roomId, name, creatorToken, role = "editor" }, callback) => {
+  socket.on("room:join", ({ roomId, name, creatorToken, role = "editor", initialRemainingSeconds }, callback) => {
     if (!rooms.has(roomId)) {
       rooms.set(roomId, {
         participants: new Map(),
         creatorToken: creatorToken ?? null,
         locked: false,
+        timerRunning: true,
+        remainingSeconds: typeof initialRemainingSeconds === "number" ? initialRemainingSeconds : 3600,
       })
       startSession(roomId)
     }
@@ -123,7 +142,7 @@ io.on("connection", (socket) => {
     )
 
     if (typeof callback === "function") {
-      callback({ success: true, locked: room.locked })
+      callback({ success: true, locked: room.locked, timerRunning: room.timerRunning })
     }
 
     fetch("http://localhost:3000/api/participant", {
@@ -145,16 +164,20 @@ io.on("connection", (socket) => {
     const participant = room.participants.get(socket.id)
     if (!participant) return
 
+    if (participant.status === "typing...") return
+
     participant.status = "typing..."
     io.to(roomId).emit("participants:update",
       Array.from(room.participants.values())
     )
 
     setTimeout(() => {
-      if (room.participants.has(socket.id)) {
-        participant.status = "online"
+      const currentRoom = rooms.get(roomId)
+      const currentParticipant = currentRoom?.participants.get(socket.id)
+      if (currentParticipant && currentParticipant.status === "typing...") {
+        currentParticipant.status = "online"
         io.to(roomId).emit("participants:update",
-          Array.from(room.participants.values())
+          Array.from(currentRoom!.participants.values())
         )
       }
     }, 2000)
@@ -263,12 +286,14 @@ io.on("connection", (socket) => {
   socket.on("timer:pause", ({ roomId, creatorToken }) => {
    const room = rooms.get(roomId)
    if (!room || room.creatorToken !== creatorToken) return
+   room.timerRunning = false
    io.to(roomId).emit("timer:paused")
   })
 
   socket.on("timer:resume", ({ roomId, creatorToken }) => {
     const room = rooms.get(roomId)
     if (!room || room.creatorToken !== creatorToken) return
+    room.timerRunning = true
     io.to(roomId).emit("timer:resumed")
   })
 

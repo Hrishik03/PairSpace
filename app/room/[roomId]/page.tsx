@@ -158,10 +158,10 @@ export function RoomPageInner({ params }: RoomPageProps) {
   }
 
   useEffect(() => {
-    if (!socket || !roomId || !userName) return;
-  
+    if (!socket || !roomId || !userName || timeLeft === null) return;
+
     const creatorToken = localStorage.getItem("creatorToken");
-  
+
     socket.emit(
       "room:join",
       {
@@ -169,8 +169,9 @@ export function RoomPageInner({ params }: RoomPageProps) {
         name: userName,
         creatorToken: creatorToken ?? undefined,
         role: creatorToken ? "host" : "editor",
+        initialRemainingSeconds: timeLeft,
       },
-      (response: { error?: string; locked?: boolean }) => {
+      (response: { error?: string; locked?: boolean; timerRunning?: boolean }) => {
         if (response?.error) {
           router.push("/")
           return
@@ -178,9 +179,12 @@ export function RoomPageInner({ params }: RoomPageProps) {
         if (response?.locked) {
           setRoomLocked(true)
         }
+        if (typeof response?.timerRunning === "boolean") {
+          setTimerRunning(response.timerRunning)
+        }
       }
     )
-  
+
     socket.on("participants:update", (data: Participant[]) => {
       console.log("participants data:", data)
       setParticipants(data);
@@ -209,6 +213,13 @@ export function RoomPageInner({ params }: RoomPageProps) {
 
     socket.on("timer:paused", () => setTimerRunning(false))
     socket.on("timer:resumed", () => setTimerRunning(true))
+    socket.on("timer:tick", ({ remainingSeconds }: { remainingSeconds: number }) => {
+      setTimeLeft(remainingSeconds)
+    })
+    socket.on("timer:ended", () => {
+      setTimeLeft(0)
+      setTimerRunning(false)
+    })
     socket.on("room:locked", (locked: boolean) => setRoomLocked(locked))
     socket.on("room:kicked", () => {
       socket.disconnect()
@@ -216,7 +227,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
     })
 
     // socket.off("notes:changed")
-  
+
     return () => {
       socket.off("participants:update");
       socket.off("language:changed");
@@ -225,28 +236,14 @@ export function RoomPageInner({ params }: RoomPageProps) {
       socket.off("notes:changed");
       socket.off("timer:paused");
       socket.off("timer:resumed");
+      socket.off("timer:tick");
+      socket.off("timer:ended");
       socket.off("room:locked");
       socket.off("room:kicked");
     };
-  }, [socket, roomId, router, userName]);
+  }, [socket, roomId, router, userName, timeLeft === null]);
 
-   useEffect(() => {
-     if (timeLeft === null) return
-     if (timeLeft <= 0) return
-     if (!timerRunning) return
-
-     const interval = setInterval(() => {
-       setTimeLeft(prev => {
-         if (prev === null || prev <= 0) {
-           clearInterval(interval)
-           return 0
-         }
-         return prev - 1
-       })
-     }, 1000)
-
-     return () => clearInterval(interval)
-   }, [timerRunning, timeLeft])
+  // Removed local interval
 
   const myParticipant = participants.find(p => p.id === socket?.id)
   const isHost = myParticipant?.role === "host"
@@ -647,10 +644,10 @@ export function RoomPageInner({ params }: RoomPageProps) {
                           <span className="ml-1 text-zinc-500">(you)</span>
                         )}
                       </p>
-                      <p className={`text-xs ${
+                      <p className={`text-[11px] leading-tight ${
                         p.status === "typing..."
-                          ? "text-emerald-400"
-                          : "text-zinc-500"
+                          ? "text-amber-400"
+                          : "text-emerald-400/80"
                       }`}>
                         {p.status || "online"}
                       </p>

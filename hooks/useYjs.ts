@@ -15,6 +15,17 @@ export function useYjs({ roomId, userName, userColor }: UseYjsProps) {
   const providerRef = useRef<unknown>(null)
   const ydocRef = useRef<unknown>(null)
 
+  useEffect(() => {
+    if (providerRef.current && (providerRef.current as any).awareness) {
+      const provider = providerRef.current as any
+      provider.awareness.setLocalStateField("user", {
+        name: userName,
+        color: userColor,
+        colorLight: userColor + "33",
+      })
+    }
+  }, [userName, userColor])
+
   const bindEditor = async (editor: Monaco.editor.IStandaloneCodeEditor) => {
     const Y = await import("yjs")
     const { WebsocketProvider } = await import("y-websocket")
@@ -45,7 +56,65 @@ export function useYjs({ roomId, userName, userColor }: UseYjsProps) {
     provider.awareness.setLocalStateField("user", {
       name: userName,
       color: userColor,
+      colorLight: userColor + "33",
     })
+
+    const styleEl = document.createElement("style")
+    styleEl.id = "yjs-cursor-styles"
+    editor.getDomNode()?.appendChild(styleEl)
+
+    const updateStyles = () => {
+      const states = provider.awareness.getStates()
+      let css = `
+        .yRemoteSelection {
+          background-color: #5b7fff33;
+        }
+        .yRemoteSelectionHead {
+          position: absolute;
+          border-left: 2px solid #5b7fff;
+          border-top: 2px solid #5b7fff;
+          height: 100%;
+          box-sizing: border-box;
+        }
+        .yRemoteSelectionHead::after {
+          position: absolute;
+          top: -1.4em;
+          left: -2px;
+          font-size: 11px;
+          padding: 1px 4px;
+          border-radius: 4px;
+          font-weight: 600;
+          color: white;
+          white-space: nowrap;
+          pointer-events: none;
+          z-index: 10;
+        }
+      `
+
+      states.forEach((state: any, clientID: number) => {
+        if (clientID === ydoc.clientID) return
+        if (state.user) {
+          const { color, name } = state.user
+          const colorLight = state.user.colorLight || color + "33"
+          css += `
+            .yRemoteSelection-${clientID} {
+              background-color: ${colorLight} !important;
+            }
+            .yRemoteSelectionHead-${clientID} {
+              border-color: ${color} !important;
+            }
+            .yRemoteSelectionHead-${clientID}::after {
+              content: "${name}";
+              background-color: ${color} !important;
+            }
+          `
+        }
+      })
+      styleEl.innerHTML = css
+    }
+
+    provider.awareness.on("change", updateStyles)
+    updateStyles()
 
     const binding = new MonacoBinding(
       ytext,
