@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
       creatorToken,
       language: body.language ?? "typescript",
       durationMinutes: body.durationMinutes ?? 60,
+      maxParticipants: body.maxParticipants ?? 5,
       expiresAt,
     },
   })
@@ -47,6 +48,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     language: room.language,
     durationMinutes: room.durationMinutes,
+    maxParticipants: room.maxParticipants,
     expiresAt: room.expiresAt.toISOString(),
     remainingSeconds,
   })

@@ -12,6 +12,7 @@ model Room {
   creatorToken    String
   language        String        @default("typescript")
   durationMinutes Int           @default(60)
+  maxParticipants Int           @default(5)
   locked          Boolean       @default(false)
   createdAt       DateTime      @default(now())
   expiresAt       DateTime

@@ -45,6 +45,7 @@ interface Room {
   locked: boolean
   timerRunning: boolean
   remainingSeconds: number
+  maxParticipants: number
 }
 
 const rooms = new Map<string, Room>()
@@ -97,7 +98,7 @@ io.on("connection", (socket) => {
   console.log("connected:", socket.id)
 
   // Join room
-  socket.on("room:join", ({ roomId, name, creatorToken, role = "editor", initialRemainingSeconds }, callback) => {
+  socket.on("room:join", ({ roomId, name, creatorToken, role = "editor", initialRemainingSeconds, maxParticipants }, callback) => {
     if (!rooms.has(roomId)) {
       rooms.set(roomId, {
         participants: new Map(),
@@ -105,6 +106,7 @@ io.on("connection", (socket) => {
         locked: false,
         timerRunning: true,
         remainingSeconds: typeof initialRemainingSeconds === "number" ? initialRemainingSeconds : 3600,
+        maxParticipants: typeof maxParticipants === "number" ? maxParticipants : 5,
       })
       startSession(roomId)
     }
@@ -115,6 +117,13 @@ io.on("connection", (socket) => {
     if (room.locked && !isHost) {
       if (typeof callback === "function") {
         callback({ error: "Room is locked" })
+      }
+      return
+    }
+
+    if (!isHost && room.participants.size >= room.maxParticipants) {
+      if (typeof callback === "function") {
+        callback({ error: "Room is full" })
       }
       return
     }

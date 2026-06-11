@@ -111,6 +111,8 @@ export function RoomPageInner({ params }: RoomPageProps) {
       setLanguage(data.language)
       localStorage.setItem(`language-${roomId}`, data.language)
       setTimeLeft(typeof data.remainingSeconds === "number" ? data.remainingSeconds : data.durationMinutes * 60)
+      // Store maxParticipants temporarily to pass to socket
+      ;(window as any)._maxParticipants = data.maxParticipants
     })
 }, [roomId, router])
 
@@ -182,9 +184,11 @@ export function RoomPageInner({ params }: RoomPageProps) {
         creatorToken: creatorToken ?? undefined,
         role: creatorToken ? "host" : "editor",
         initialRemainingSeconds: timeLeft,
+        maxParticipants: (window as any)._maxParticipants,
       },
       (response: { error?: string; locked?: boolean; timerRunning?: boolean }) => {
         if (response?.error) {
+          alert(response.error)
           router.push("/")
           return
         }
