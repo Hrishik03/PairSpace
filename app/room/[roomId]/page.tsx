@@ -263,6 +263,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
 
   const myParticipant = participants.find(p => p.id === socket?.id)
   const isHost = myParticipant?.role === "host"
+  const isReadOnly = myParticipant?.role === "viewer"
 
   const languageLabel = LANGUAGE_LABELS.find((label) => LANGUAGE_VALUE_BY_LABEL[label] === language) ?? language
 
@@ -720,14 +721,6 @@ export default function RoomPage({ params }: RoomPageProps) {
   return (
     <Suspense fallback={
       <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-400">
-        Loading room...
-      </div>
-    }>
-      <RoomPageInner params={params} />
-    </Suspense>
-  )
-}
--zinc-950 text-zinc-400">
         Loading room...
       </div>
     }>
