@@ -168,23 +168,35 @@ io.on("connection", (socket) => {
 
   // ── Code execution ──
   socket.on("code:run", ({ roomId, output, exitCode, runtime }) => {
-    const participant = rooms.get(roomId)?.participants.get(socket.id)
-    logEvent(roomId, "run", participant?.name ?? "unknown", {
+    const room = rooms.get(roomId)
+    const participant = room?.participants.get(socket.id)
+    if (!participant || participant.role === "viewer") return
+
+    logEvent(roomId, "run", participant.name, {
       output,
       exitCode,
       runtime,
     })
-    io.to(roomId).emit("code:output", { output, exitCode, runtime })
+    io.to(roomId).emit("code:output", { 
+      output, 
+      exitCode, 
+      runtime, 
+      user: participant.name,
+      color: participant.color 
+    })
   })
 
   // ── Language change ──
-  socket.on("language:change", ({ roomId, language }) => {
+  socket.on("language:change", ({ roomId, language, code }) => {
+    const room = rooms.get(roomId)
+    const participant = room?.participants.get(socket.id)
+    if (!participant || participant.role === "viewer") return
+
     setSessionLanguage(roomId, language)
-    const participant = rooms.get(roomId)?.participants.get(socket.id)
-    logEvent(roomId, "language_change", participant?.name ?? "unknown", {
+    logEvent(roomId, "language_change", participant.name, {
       language,
     })
-    socket.to(roomId).emit("language:changed", { language })
+    socket.to(roomId).emit("language:changed", { language, code })
   })
 
   // ── Role change (host only) ──
@@ -237,13 +249,41 @@ io.on("connection", (socket) => {
   })
 
   // ── End session (host only) ──
-  socket.on("session:end", ({ roomId, creatorToken }) => {
+  socket.on("session:end", async ({ roomId, creatorToken }) => {
     const room = rooms.get(roomId)
     if (!room) return
     if (room.creatorToken !== creatorToken) return
 
-    io.to(roomId).emit("session:ended")
-    saveReplay(roomId)
+    const session = endSession(roomId)
+    if (!session || session.events.length === 0) {
+      io.to(roomId).emit("session:ended", { replayId: null })
+      rooms.delete(roomId)
+      return
+    }
+
+    const durationS = Math.round((Date.now() - session.startTime) / 1000)
+    const { nanoid } = await import("nanoid")
+    const replayId = nanoid(10)
+
+    try {
+      await fetch("http://localhost:3000/api/replay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          replayId,
+          roomId,
+          durationS,
+          language: session.language ?? "typescript",
+          log: session.events,
+        }),
+      })
+      console.log(`Replay saved: ${replayId}`)
+      io.to(roomId).emit("session:ended", { replayId })
+    } catch (err) {
+      console.error("Failed to save replay:", err)
+      io.to(roomId).emit("session:ended", { replayId: null })
+    }
+
     rooms.delete(roomId)
   })
 
@@ -263,6 +303,10 @@ io.on("connection", (socket) => {
   })
 
   socket.on("notes:update", ({ roomId, notes }) => {
+    const room = rooms.get(roomId)
+    const participant = room?.participants.get(socket.id)
+    if (!participant || participant.role === "viewer") return
+
     socket.to(roomId).emit("notes:changed", { notes })
   })
 

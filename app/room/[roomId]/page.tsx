@@ -1,23 +1,35 @@
 "use client";
-import { use, useEffect, useState, type FormEvent } from "react";
+import { use, useEffect, useState, useRef, type FormEvent } from "react";
 import { useYjs } from "@/hooks/useYjs"
 import type { editor } from "monaco-editor"
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Activity,
+  Braces,
   Clock3,
   Code2,
   Copy,
+  Lock,
   Loader2,
+  MessageSquareText,
   PauseCircle,
   PlayCircle,
   Play,
   Settings,
+  Settings2,
+  Share2,
+  Square,
+  Terminal,
   TerminalSquare,
+  Unlock,
   Users,
+  UserPlus,
+  UserMinus,
 } from "lucide-react";
 import ShareModal from "@/components/room/ShareModal"
 import SettingsModal, { EditorSettings } from "@/components/room/SettingsModal"
+import SessionEndedModal from "@/components/room/SessionEndedModal"
 import MonacoEditor from "@/components/editor/MonacoEditor";
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button";
@@ -29,6 +41,7 @@ import {
   LANGUAGE_EXTENSION,
   formatTime,
 } from "@/lib/editor-config"
+import { nanoid } from "nanoid";
 
 type Participant = {
   id: string
@@ -49,6 +62,15 @@ type ChatMessage = {
   text: string
   user: string
   color: string
+  timestamp: number
+}
+
+type SessionEvent = {
+  id: string
+  type: "join" | "leave" | "run" | "language_change" | "chat"
+  user: string
+  color: string
+  description: string
   timestamp: number
 }
 
@@ -95,6 +117,29 @@ export function RoomPageInner({ params }: RoomPageProps) {
     const saved = localStorage.getItem("editorSettings")
     return saved ? JSON.parse(saved) : { theme: "vs-dark", fontSize: 14, wordWrap: "on", keybindings: "standard" }
   })
+
+  // Replay tab state
+  const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([])
+  const [sessionEnded, setSessionEnded] = useState(false)
+  const [replayId, setReplayId] = useState<string | null>(null)
+  const [startTime] = useState(Date.now())
+  const [codeRunCount, setCodeRunCount] = useState(0)
+  const [elapsedTime, setElapsedTime] = useState(0)
+  const prevParticipantsRef = useRef<Participant[]>([])
+  const activityEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - startTime) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [startTime])
+
+  useEffect(() => {
+    if (activeTab === "replay") {
+      activityEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [sessionEvents, activeTab])
 
   const updateSettings = (newSettings: EditorSettings) => {
     setEditorSettings(newSettings)
@@ -209,15 +254,56 @@ export function RoomPageInner({ params }: RoomPageProps) {
 
     socket.on("participants:update", (data: Participant[]) => {
       console.log("participants data:", data)
+      const prev = prevParticipantsRef.current
+      const newJoins = data.filter(p => !prev.find(pp => pp.id === p.id));
+      const newLeaves = prev.filter(p => !data.find(pp => pp.id === p.id));
+      
+      newJoins.forEach(p => {
+        setSessionEvents(prevEvents => [
+          { id: nanoid(), type: "join", user: p.name, color: p.color, description: "joined the room", timestamp: Date.now() },
+          ...prevEvents
+        ]);
+      });
+      newLeaves.forEach(p => {
+        setSessionEvents(prevEvents => [
+          { id: nanoid(), type: "leave", user: p.name, color: p.color, description: "left the room", timestamp: Date.now() },
+          ...prevEvents
+        ]);
+      });
+      
+      prevParticipantsRef.current = data
       setParticipants(data);
     });
 
-    socket.on("code:output", (data: ExecutionResult) => {
+    socket.on("code:output", (data: ExecutionResult & { user?: string; color?: string }) => {
       setResult({ ...data, timestamp: Date.now() })
+      setCodeRunCount(prev => prev + 1)
+      setSessionEvents(prev => [
+        { 
+          id: nanoid(), 
+          type: "run", 
+          user: data.user || "System", 
+          color: data.color || "#5b7fff", 
+          description: "executed code", 
+          timestamp: Date.now() 
+        },
+        ...prev
+      ]);
     });
 
     socket.on("chat:new", (message: ChatMessage) => {
       setChatMessages((current) => [...current, message])
+      setSessionEvents(prev => [
+        { 
+          id: nanoid(), 
+          type: "chat", 
+          user: message.user, 
+          color: message.color, 
+          description: `sent a message: ${message.text}`, 
+          timestamp: Date.now() 
+        },
+        ...prev
+      ]);
     });
 
     socket.on(
@@ -226,6 +312,17 @@ export function RoomPageInner({ params }: RoomPageProps) {
         setLanguage(language)
         setCode(code)
         localStorage.setItem(`language-${roomId}`, language)
+        setSessionEvents(prev => [
+          { 
+            id: nanoid(), 
+            type: "language_change", 
+            user: "System", 
+            color: "#5b7fff", 
+            description: `switched language to ${language}`, 
+            timestamp: Date.now() 
+          },
+          ...prev
+        ]);
       }
     );
 
@@ -247,10 +344,9 @@ export function RoomPageInner({ params }: RoomPageProps) {
       socket.disconnect()
       router.push("/")
     })
-    socket.on("session:ended", () => {
-      console.log("Session ended by host, redirecting...")
-      router.push("/")
-      setTimeout(() => socket.disconnect(), 100)
+    socket.on("session:ended", ({ replayId }: { replayId: string }) => {
+      setSessionEnded(true)
+      setReplayId(replayId)
     })
 
     // socket.off("notes:changed")
@@ -310,7 +406,9 @@ export function RoomPageInner({ params }: RoomPageProps) {
     const creatorToken = localStorage.getItem("creatorToken")
     if (!creatorToken || !socket) return
 
-    socket.emit("room:kick", { roomId, creatorToken, targetId })
+    if (confirm("Are you sure you want to kick this participant?")) {
+      socket.emit("room:kick", { roomId, creatorToken, targetId })
+    }
   }
 
   const handleRoleChange = (targetId: string, newRole: "editor" | "viewer") => {
@@ -344,6 +442,13 @@ export function RoomPageInner({ params }: RoomPageProps) {
     }
   }
 
+  const getRelativeTime = (timestamp: number) => {
+    const diff = Math.floor((Date.now() - timestamp) / 1000)
+    if (diff < 60) return "just now"
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+    return `${Math.floor(diff / 3600)}h ago`
+  }
+
   return (
     <main className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
       <header className="border-b border-zinc-800 bg-zinc-900">
@@ -358,8 +463,9 @@ export function RoomPageInner({ params }: RoomPageProps) {
           <div className="mx-auto hidden items-center gap-2 lg:flex">
             <select
               value={language}
+              disabled={isReadOnly}
               onChange={(event) => handleLanguageChange(event.target.value)}
-              className="h-8 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-300 outline-none"
+              className="h-8 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-300 outline-none disabled:opacity-50"
             >
               {LANGUAGE_LABELS.map((lang) => (
                 <option key={lang} value={LANGUAGE_VALUE_BY_LABEL[lang]}>
@@ -370,7 +476,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
             <Button
               size="sm"
               onClick={handleRun}
-              disabled={running}
+              disabled={running || isReadOnly}
               className="h-8 bg-emerald-400 text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
             >
               <Play className="size-3.5" />
@@ -409,16 +515,6 @@ export function RoomPageInner({ params }: RoomPageProps) {
             </div>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            {isHost && (
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={handleEndSession}
-                className="h-8 cursor-pointer"
-              >
-                End Session
-              </Button>
-            )}
             <span className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
              {myParticipant?.role ?? "connecting..."}
             </span>
@@ -506,8 +602,9 @@ export function RoomPageInner({ params }: RoomPageProps) {
           <div className="flex flex-wrap gap-2 border-b border-zinc-800 px-3 py-2 lg:hidden">
             <select
               value={language}
+              disabled={isReadOnly}
               onChange={(event) => handleLanguageChange(event.target.value)}
-              className="h-8 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-300 outline-none"
+              className="h-8 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-300 outline-none disabled:opacity-50"
             >
               {LANGUAGE_LABELS.map((lang) => (
                 <option key={lang} value={LANGUAGE_VALUE_BY_LABEL[lang]}>
@@ -518,7 +615,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
             <Button
               size="sm"
               onClick={handleRun}
-              disabled={running}
+              disabled={running || isReadOnly}
               className="h-8 bg-emerald-400 text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
             >
               <Play className="size-3.5" />
@@ -546,6 +643,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
               ) : (
               <textarea
                 value={notes}
+                readOnly={isReadOnly}
                 onChange={(e) => {
                   setNotes(e.target.value)
                   socket?.emit("notes:update", { roomId, notes: e.target.value })
@@ -666,9 +764,65 @@ export function RoomPageInner({ params }: RoomPageProps) {
                 </form>
               </div>
             ) : (
-              <div className="flex h-full flex-col justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 p-6 text-center text-sm text-zinc-500">
-                <p className="mb-2 text-zinc-300">Replay is coming soon.</p>
-                <p>Use the chat tab to collaborate in real time.</p>
+              <div className="flex h-full flex-col">
+                {/* Session Stats Bar */}
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {[
+                    { icon: Activity, label: formatTime(elapsedTime) },
+                    { icon: Users, label: participants.length },
+                    { icon: Terminal, label: codeRunCount },
+                    { icon: Braces, label: languageLabel },
+                  ].map((stat, i) => (
+                    <div key={i} className="flex items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
+                      <stat.icon className="size-3" />
+                      {stat.label}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Activity Feed */}
+                <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+                  {sessionEvents.length > 0 ? (
+                    sessionEvents.map((event) => (
+                      <div key={event.id} className="flex items-start gap-3 text-xs">
+                        <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded bg-zinc-800 border border-zinc-700">
+                          {event.type === "join" && <UserPlus className="size-3 text-emerald-400" />}
+                          {event.type === "leave" && <UserMinus className="size-3 text-red-400" />}
+                          {event.type === "run" && <Play className="size-3 text-blue-400 fill-current" />}
+                          {event.type === "language_change" && <Code2 className="size-3 text-amber-400" />}
+                          {event.type === "chat" && <MessageSquareText className="size-3 text-zinc-400" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-zinc-300">
+                            <span className="font-semibold" style={{ color: event.color }}>{event.user}</span>
+                            {" "}{event.description}
+                          </p>
+                          <span className="text-[10px] text-zinc-500">{getRelativeTime(event.timestamp)}</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center text-center text-zinc-600">
+                      <Activity className="mb-2 size-8 opacity-20" />
+                      <p>No activity yet — start coding!</p>
+                    </div>
+                  )}
+                  <div ref={activityEndRef} />
+                </div>
+
+                {/* Session Controls */}
+                <div className="mt-4 pt-4 border-t border-zinc-800">
+                  {isHost && !!localStorage.getItem("creatorToken") && (
+                    <Button
+                      onClick={handleEndSession}
+                      variant="outline"
+                      className="w-full border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 h-9"
+                    >
+                      <Square className="size-3.5 mr-2" />
+                      End session
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -738,6 +892,13 @@ export function RoomPageInner({ params }: RoomPageProps) {
           settings={editorSettings}
           onUpdate={updateSettings}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {sessionEnded && (
+        <SessionEndedModal
+          replayId={replayId}
+          onClose={() => setSessionEnded(false)}
         />
       )}
     </main>
