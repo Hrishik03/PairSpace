@@ -10,19 +10,13 @@ import {
   Clock3,
   Code2,
   Copy,
-  Lock,
   Loader2,
   MessageSquareText,
   PauseCircle,
   PlayCircle,
   Play,
   Settings,
-  Settings2,
-  Share2,
-  Square,
   Terminal,
-  TerminalSquare,
-  Unlock,
   Users,
   UserPlus,
   UserMinus,
@@ -31,6 +25,7 @@ import ShareModal from "@/components/room/ShareModal"
 import SettingsModal, { EditorSettings } from "@/components/room/SettingsModal"
 import SessionEndedModal from "@/components/room/SessionEndedModal"
 import MonacoEditor from "@/components/editor/MonacoEditor";
+import TerminalPanel from "@/components/editor/TerminalPanel";
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button";
 import { useSocket } from "@/hooks/useSockets"
@@ -478,7 +473,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
               size="sm"
               onClick={handleRun}
               disabled={running || isReadOnly}
-              className="h-8 bg-emerald-400 text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
+              className="h-8 cursor-pointer bg-emerald-400 text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
             >
               <Play className="size-3.5" />
               {running ? "Running..." : "Run"}
@@ -542,7 +537,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
             <Button size="sm"
              variant="outline"
              onClick={() => setShareOpen(true)}
-             className="h-8 border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
+             className="h-8 cursor-pointer border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
              >
               <Copy className="size-3.5" />
               Share
@@ -551,7 +546,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
               size="sm" 
               variant="outline" 
               onClick={() => setSettingsOpen(true)}
-              className="h-8 border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
+              className="h-8 cursor-pointer border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
             >
               <Settings className="size-3.5" />
             </Button>
@@ -627,7 +622,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
               size="sm"
               onClick={handleRun}
               disabled={running || isReadOnly}
-              className="h-8 bg-emerald-400 text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
+              className="h-8 cursor-pointer bg-emerald-400 text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
             >
               <Play className="size-3.5" />
               {running ? "Running..." : "Run"}
@@ -679,21 +674,21 @@ export function RoomPageInner({ params }: RoomPageProps) {
           <div className="grid grid-cols-3 border-b border-zinc-800 text-center text-xs">
             <button
               type="button"
-              className={`px-2 py-2 ${activeTab === "output" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
+              className={`cursor-pointer px-2 py-2 ${activeTab === "output" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
               onClick={() => setActiveTab("output")}
             >
               Output
             </button>
             <button
               type="button"
-              className={`px-2 py-2 ${activeTab === "chat" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
+              className={`cursor-pointer px-2 py-2 ${activeTab === "chat" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
               onClick={() => setActiveTab("chat")}
             >
               Chat
             </button>
             <button
               type="button"
-              className={`px-2 py-2 ${activeTab === "replay" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
+              className={`cursor-pointer px-2 py-2 ${activeTab === "replay" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
               onClick={() => setActiveTab("replay")}
             >
               Replay
@@ -702,49 +697,12 @@ export function RoomPageInner({ params }: RoomPageProps) {
 
           <div className="overflow-hidden p-3">
             {activeTab === "output" ? (
-              <div className="space-y-1 overflow-auto font-mono text-xs">
-                <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2 text-xs text-zinc-400">
-                  <TerminalSquare className="size-3.5" />
-                  {result ? `Last run · ${new Date(result.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "No runs yet"}
-                  {result && (
-                    <span className={`ml-auto rounded-full border px-2 py-0.5 text-xs ${
-                      result.exitCode === 0
-                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                        : "border-red-500/30 bg-red-500/10 text-red-300"
-                    }`}>
-                      {result.exitCode === 0 ? "Passed" : "Error"}
-                    </span>
-                  )}
-                </div>
-
-                {result ? (
-                  <>
-                    <p className="text-zinc-500">$ {languageLabel.toLowerCase()} solution</p>
-                    <p className={result.exitCode === 0 ? "text-emerald-300" : "text-red-400"}>
-                      {result.output}
-                    </p>
-                    {result.runtime && (
-                      <p className="pt-2 text-zinc-500">
-                        {/* Runtime {Math.round(result.runtime * 1000)}ms · Exit code {result.exitCode} */}
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-zinc-500">Hit Run to execute code</p>
-                )}
-
-                <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-950 p-2">
-                  <label className="mb-2 block text-xs uppercase tracking-wide text-zinc-500">
-                    Standard input
-                  </label>
-                  <textarea
-                    value={stdin}
-                    onChange={(event) => setStdin(event.target.value)}
-                    placeholder="Enter input for your program"
-                    className="min-h-25 w-full resize-none rounded-md border border-zinc-800 bg-zinc-900 p-2 text-xs text-zinc-100 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
-                  />
-                </div>
-              </div>
+              <TerminalPanel
+                result={result}
+                running={running}
+                stdin={stdin}
+                onStdinChange={setStdin}
+              />
             ) : activeTab === "chat" ? (
               <div className="flex h-full flex-col gap-3">
                 <div className="space-y-3 overflow-auto pr-1">

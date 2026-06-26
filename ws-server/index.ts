@@ -362,6 +362,6 @@ io.on("connection", (socket) => {
   })
 })
 
-httpServer.listen(3002, () => {
-  console.log("ws-server running on port 3002")
+httpServer.listen(3001, () => {
+  console.log("ws-server running on port 3001")
 })
