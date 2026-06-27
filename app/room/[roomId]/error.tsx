@@ -23,9 +23,9 @@ export default function RoomError({
         <AlertTriangle className="size-8" />
       </div>
       
-      <h2 className="mb-2 text-2xl font-bold tracking-tight">This room couldn't be loaded</h2>
+      <h2 className="mb-2 text-2xl font-bold tracking-tight">This room could not be loaded</h2>
       <p className="mb-8 max-w-md text-zinc-400">
-        The room may have expired, been deleted, or the link may be invalid. 
+        The room may be full, locked, expired, deleted, or the link may be invalid.
         Please check the URL or try again later.
       </p>
 

@@ -66,6 +66,14 @@ setInterval(() => {
 }, 1000)
 const COLORS = ["#5b7fff", "#ff5e7a", "#ffd166", "#3dffa0", "#a78bfa", "#f97316"]
 
+function getAvailableColor(room: Room) {
+  const usedColors = new Set(
+    Array.from(room.participants.values()).map((participant) => participant.color)
+  )
+
+  return COLORS.find((color) => !usedColors.has(color)) ?? COLORS[0]
+}
+
 // ── Save replay via Next.js API ──
 async function saveReplay(roomId: string) {
   const session = endSession(roomId)
@@ -129,7 +137,7 @@ io.on("connection", (socket) => {
     }
 
     const assignedRole = isHost ? "host" : role
-    const color = COLORS[room.participants.size % COLORS.length] ?? COLORS[0]
+    const color = getAvailableColor(room)
 
     const participant: Participant = {
       id: socket.id,

@@ -235,8 +235,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
       },
       (response: { error?: string; locked?: boolean; timerRunning?: boolean }) => {
         if (response?.error) {
-          alert(response.error)
-          router.push("/")
+          setRoomError(new Error(response.error))
           return
         }
         if (response?.locked) {
@@ -438,6 +437,13 @@ export function RoomPageInner({ params }: RoomPageProps) {
     }
   }
 
+  const handleExitRoom = () => {
+    if (confirm("Are you sure you want to exit this room?")) {
+      socket?.disconnect()
+      router.push("/")
+    }
+  }
+
   const getRelativeTime = (timestamp: number) => {
     const diff = Math.floor((Date.now() - timestamp) / 1000)
     if (diff < 60) return "just now"
@@ -449,10 +455,10 @@ export function RoomPageInner({ params }: RoomPageProps) {
     <main className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
       <header className="border-b border-zinc-800 bg-zinc-900">
         <div className="mx-auto flex w-full max-w-425 flex-wrap items-center gap-2 px-3 py-2 md:px-5">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold">
+          <span className="inline-flex items-center gap-2 text-sm font-semibold">
             <Code2 className="size-4 text-blue-400" />
             PairSpace
-          </Link>
+          </span>
           <span className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
             {roomId}
           </span>
@@ -534,6 +540,16 @@ export function RoomPageInner({ params }: RoomPageProps) {
                 End session
               </Button>
             )}
+            {!isHost && (myParticipant?.role === "editor" || myParticipant?.role === "viewer") && (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={handleExitRoom}
+                className="cursor-pointer h-8 border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+              >
+                Exit
+              </Button>
+            )}
             <Button size="sm"
              variant="outline"
              onClick={() => setShareOpen(true)}
@@ -584,7 +600,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
       )}
 
       <section className="mx-auto grid w-full max-w-425 flex-1 gap-3 p-3 md:grid-cols-[1fr_340px]">
-        <div className="grid min-h-[75vh] grid-rows-[auto_auto_1fr_auto] rounded-xl border border-zinc-800 bg-zinc-900">
+        <div className="flex flex-col rounded-xl border border-zinc-800 bg-zinc-900">
 
           <div className="flex items-end gap-1 border-b border-zinc-800 bg-zinc-900/80 px-3 pt-2">
            {([
@@ -634,7 +650,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
             </span>
           </div>
 
-          <div className="h-[60vh] overflow-hidden bg-zinc-950">
+          <div className="h-[75vh] overflow-hidden bg-zinc-950">
             {activeEditorTab === "solution" ? (
               <MonacoEditor
                 language={language}
@@ -661,13 +677,12 @@ export function RoomPageInner({ params }: RoomPageProps) {
             )}
           </div>
 
-          <div className="flex items-center justify-between border-t border-zinc-800 px-3 py-1">
-            <div className="flex items-center gap-2 text-xs text-zinc-500">
+          {/* <div className="flex items-center justify-between border-t border-zinc-800 px-3 py-1">
+            <div className="flex items-center gap-2 text-md text-zinc-500">
               <Users className="size-4" />
               {participants.length} participant{participants.length === 1 ? "" : "s"} online
             </div>
-            <span className="text-xs text-zinc-500">Ln 6, Col 34</span>
-          </div>
+          </div> */}
         </div>
 
         <aside className="grid min-h-[75vh] grid-rows-[auto_1fr_auto] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">

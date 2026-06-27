@@ -152,7 +152,7 @@ export default function TerminalPanel({
   return (
     <div
       ref={containerRef}
-      className="h-full min-h-[22rem] w-full overflow-hidden rounded-md border border-zinc-800 bg-zinc-950"
+      className="h-full min-h-[14rem] w-full overflow-hidden rounded-md border border-zinc-800 bg-zinc-950"
     />
   );
 }
