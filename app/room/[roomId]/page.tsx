@@ -1,84 +1,34 @@
 "use client";
-import { use, useEffect, useState, useRef, type FormEvent } from "react";
-import { useYjs } from "@/hooks/useYjs"
+
+import { use, useEffect, useRef, useState, type FormEvent } from "react";
 import type { editor } from "monaco-editor"
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  Activity,
-  Braces,
-  Clock3,
-  Code2,
-  Copy,
-  Loader2,
-  MessageSquareText,
-  PauseCircle,
-  PlayCircle,
-  Play,
-  Settings,
-  Terminal,
-  Users,
-  UserPlus,
-  UserMinus,
-} from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { nanoid } from "nanoid";
+import EditorPanel from "@/components/room/EditorPanel"
+import RightPanel from "@/components/room/RightPanel"
 import ShareModal from "@/components/room/ShareModal"
 import SettingsModal, { EditorSettings } from "@/components/room/SettingsModal"
 import SessionEndedModal from "@/components/room/SessionEndedModal"
-import MonacoEditor from "@/components/editor/MonacoEditor";
-import TerminalPanel from "@/components/editor/TerminalPanel";
-import { Suspense } from "react"
+import Topbar from "@/components/room/Topbar"
 import { Button } from "@/components/ui/button";
 import { useSocket } from "@/hooks/useSockets"
+import { useYjs } from "@/hooks/useYjs"
 import {
-  LANGUAGE_VALUE_BY_LABEL,
-  LANGUAGE_LABELS,
   CODE_TEMPLATE_BY_LANGUAGE,
-  LANGUAGE_EXTENSION,
-  formatTime,
+  LANGUAGE_LABELS,
+  LANGUAGE_VALUE_BY_LABEL,
 } from "@/lib/editor-config"
-import { nanoid } from "nanoid";
-
-type Participant = {
-  id: string
-  name: string
-  color: string
-  role: string
-  status: string
-}
-
-type ExecutionResult = {
-  output: string
-  exitCode: number
-  runtime: number
-  timestamp: number
-}
-
-type ChatMessage = {
-  text: string
-  user: string
-  color: string
-  timestamp: number
-}
-
-type SessionEvent = {
-  id: string
-  type: "join" | "leave" | "run" | "language_change" | "chat"
-  user: string
-  color: string
-  description: string
-  timestamp: number
-}
+import type { ChatMessage, ExecutionResult, Participant, SessionEvent } from "@/types/room"
 
 type RoomPageProps = {
   params: Promise<{ roomId: string }>;
 };
 
-// const editorTabs = ["solution.ts", "notes.md"];
-
-
 export function RoomPageInner({ params }: RoomPageProps) {
   const { roomId } = use(params);
   const router = useRouter();
+  const socket = useSocket()
   const [language, setLanguage] = useState<string>("typescript")
   const [userName, setUserName] = useState<string>(() => {
     if (typeof window === "undefined") return ""
@@ -92,7 +42,6 @@ export function RoomPageInner({ params }: RoomPageProps) {
   const [joinLoading, setJoinLoading] = useState(false)
   const [joinError, setJoinError] = useState("")
   const [code, setCode] = useState<string>(CODE_TEMPLATE_BY_LANGUAGE.typescript);
-  const socket = useSocket()
   const [participants, setParticipants] = useState<Participant[]>([])
   const [result, setResult] = useState<ExecutionResult | null>(null)
   const [running, setRunning] = useState(false)
@@ -112,14 +61,13 @@ export function RoomPageInner({ params }: RoomPageProps) {
     const saved = localStorage.getItem("editorSettings")
     return saved ? JSON.parse(saved) : { theme: "vs-dark", fontSize: 14, wordWrap: "on", keybindings: "standard" }
   })
-
-  // Replay tab state
   const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([])
   const [sessionEnded, setSessionEnded] = useState(false)
   const [replayId, setReplayId] = useState<string | null>(null)
   const [startTime] = useState(Date.now())
   const [codeRunCount, setCodeRunCount] = useState(0)
   const [elapsedTime, setElapsedTime] = useState(0)
+  const [roomError, setRoomError] = useState<Error | null>(null)
   const prevParticipantsRef = useRef<Participant[]>([])
   const activityEndRef = useRef<HTMLDivElement>(null)
 
@@ -141,8 +89,6 @@ export function RoomPageInner({ params }: RoomPageProps) {
     localStorage.setItem("editorSettings", JSON.stringify(newSettings))
   }
 
-  const [roomError, setRoomError] = useState<Error | null>(null)
-
   useEffect(() => {
     fetch(`/api/room?roomId=${roomId}`)
       .then(res => res.json())
@@ -155,7 +101,6 @@ export function RoomPageInner({ params }: RoomPageProps) {
         setCode(CODE_TEMPLATE_BY_LANGUAGE[data.language] ?? "")
         localStorage.setItem(`language-${roomId}`, data.language)
         setTimeLeft(typeof data.remainingSeconds === "number" ? data.remainingSeconds : data.durationMinutes * 60)
-        // Store maxParticipants temporarily to pass to socket
         ;(window as any)._maxParticipants = data.maxParticipants
       })
       .catch(err => setRoomError(err))
@@ -171,40 +116,49 @@ export function RoomPageInner({ params }: RoomPageProps) {
     socket?.emit("language:change", { roomId, language: newLanguage, code: nextCode })
   };
 
-  const handleRun = async () => {
-  if (running) return
-  setRunning(true)
-
-  try {
-    const res = await fetch("/api/execute", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, language, input: stdin }),
-    })
-
-    const data = await res.json()
-    if (!res.ok) {
-      throw new Error(data.error || "Execution failed")
+  const handleToggleTimer = () => {
+    const creatorToken = localStorage.getItem("creatorToken")
+    if (!creatorToken) return
+    if (timerRunning) {
+      socket?.emit("timer:pause", { roomId, creatorToken })
+    } else {
+      socket?.emit("timer:resume", { roomId, creatorToken })
     }
-
-    // broadcast to everyone in room via socket
-    socket?.emit("code:run", {
-      roomId,
-      output: data.output,
-      exitCode: data.exitCode,
-      runtime: data.runtime,
-    })
-  } catch (error) {
-    socket?.emit("code:run", {
-      roomId,
-      output: error instanceof Error ? error.message : "Execution failed",
-      exitCode: 1,
-      runtime: 0,
-    })
-  } finally {
-    setRunning(false)
   }
-}
+
+  const handleRun = async () => {
+    if (running) return
+    setRunning(true)
+
+    try {
+      const res = await fetch("/api/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, language, input: stdin }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || "Execution failed")
+      }
+
+      socket?.emit("code:run", {
+        roomId,
+        output: data.output,
+        exitCode: data.exitCode,
+        runtime: data.runtime,
+      })
+    } catch (error) {
+      socket?.emit("code:run", {
+        roomId,
+        output: error instanceof Error ? error.message : "Execution failed",
+        exitCode: 1,
+        runtime: 0,
+      })
+    } finally {
+      setRunning(false)
+    }
+  }
 
   const handleSendChat = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -344,8 +298,6 @@ export function RoomPageInner({ params }: RoomPageProps) {
       setReplayId(replayId)
     })
 
-    // socket.off("notes:changed")
-
     return () => {
       socket.off("participants:update");
       socket.off("language:changed");
@@ -362,14 +314,11 @@ export function RoomPageInner({ params }: RoomPageProps) {
     };
   }, [socket, roomId, router, userName, timeLeft === null]);
 
-  // Removed local interval
-
   const myParticipant = participants.find(p => p.id === socket?.id)
   const isHost = myParticipant?.role === "host"
   const isReadOnly = myParticipant?.role === "viewer"
-
+  const canEndSession = typeof window !== "undefined" && !!localStorage.getItem("creatorToken")
   const languageLabel = LANGUAGE_LABELS.find((label) => LANGUAGE_VALUE_BY_LABEL[label] === language) ?? language
-
   const userNameForYjs = userName || (typeof window !== "undefined" ? localStorage.getItem("userName") ?? "anonymous" : "anonymous")
 
   const { bindEditor } = useYjs({
@@ -379,7 +328,6 @@ export function RoomPageInner({ params }: RoomPageProps) {
     userColor: myParticipant?.color ?? "#5b7fff",
   })
 
-  
   const handleEditorMount = (monacoEditor: editor.IStandaloneCodeEditor) => {
     bindEditor(monacoEditor)
   }
@@ -411,6 +359,11 @@ export function RoomPageInner({ params }: RoomPageProps) {
     if (!creatorToken || !socket) return
 
     socket.emit("role:change", { roomId, creatorToken, targetId, newRole })
+  }
+
+  const handleNotesChange = (nextNotes: string) => {
+    setNotes(nextNotes)
+    socket?.emit("notes:update", { roomId, notes: nextNotes })
   }
 
   const handleJoinSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -453,122 +406,26 @@ export function RoomPageInner({ params }: RoomPageProps) {
 
   return (
     <main className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
-      <header className="border-b border-zinc-800 bg-zinc-900">
-        <div className="mx-auto flex w-full max-w-425 flex-wrap items-center gap-2 px-3 py-2 md:px-5">
-          <span className="inline-flex items-center gap-2 text-sm font-semibold">
-            <Code2 className="size-4 text-blue-400" />
-            PairSpace
-          </span>
-          <span className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
-            {roomId}
-          </span>
-          <div className="mx-auto hidden items-center gap-2 lg:flex">
-            <select
-              value={language}
-              disabled={isReadOnly}
-              onChange={(event) => handleLanguageChange(event.target.value)}
-              className="h-8 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-300 outline-none disabled:opacity-50"
-            >
-              {LANGUAGE_LABELS.map((lang) => (
-                <option key={lang} value={LANGUAGE_VALUE_BY_LABEL[lang]}>
-                  {lang}
-                </option>
-              ))}
-            </select>
-            <Button
-              size="sm"
-              onClick={handleRun}
-              disabled={running || isReadOnly}
-              className="h-8 cursor-pointer bg-emerald-400 text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
-            >
-              <Play className="size-3.5" />
-              {running ? "Running..." : "Run"}
-            </Button>
-            {/* Timer + controls */}
-            <div className="flex items-center gap-1">
-              <span className={`inline-flex h-8 items-center gap-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs ${
-                timeLeft !== null && timeLeft <= 300 ? "text-red-400" : "text-amber-300"
-              }`}>
-                <Clock3 className="size-3.5" />
-                {timeLeft !== null ? formatTime(timeLeft) : "--:--"}
-              </span>
-
-              {myParticipant?.role === "host" && (
-                <button
-                  onClick={() => {
-                    const creatorToken = localStorage.getItem("creatorToken")
-                    if (!creatorToken) return
-                    if (timerRunning) {
-                      socket?.emit("timer:pause", { roomId, creatorToken })
-                    } else {
-                      socket?.emit("timer:resume", { roomId, creatorToken })
-                    }
-                  }}
-                  title={timerRunning ? "Pause timer" : "Resume timer"}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
-                >
-                  {timerRunning ? (
-                    <PauseCircle className="size-5.5 cursor-pointer" />
-                  ) : (
-                    <PlayCircle className="size-5.5 cursor-pointer" />
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <span className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
-             {myParticipant?.role ?? "connecting..."}
-            </span>
-            {isHost && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleLockRoom}
-                className="cursor-pointer h-8 border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
-              >
-                {roomLocked ? "Unlock room" : "Lock room"}
-              </Button>
-            )}
-            {isHost && !!localStorage.getItem("creatorToken") && (
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={handleEndSession}
-                className="cursor-pointer h-8 border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
-              >
-                End session
-              </Button>
-            )}
-            {!isHost && (myParticipant?.role === "editor" || myParticipant?.role === "viewer") && (
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={handleExitRoom}
-                className="cursor-pointer h-8 border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
-              >
-                Exit
-              </Button>
-            )}
-            <Button size="sm"
-             variant="outline"
-             onClick={() => setShareOpen(true)}
-             className="h-8 cursor-pointer border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
-             >
-              <Copy className="size-3.5" />
-              Share
-            </Button>
-            <Button 
-              size="sm" 
-              variant="outline" 
-              onClick={() => setSettingsOpen(true)}
-              className="h-8 cursor-pointer border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
-            >
-              <Settings className="size-3.5" />
-            </Button>
-          </div>
-        </div>
-      </header>
+      <Topbar
+        roomId={roomId}
+        language={language}
+        isReadOnly={isReadOnly}
+        running={running}
+        timeLeft={timeLeft}
+        timerRunning={timerRunning}
+        roomLocked={roomLocked}
+        myParticipant={myParticipant}
+        isHost={isHost}
+        canEndSession={canEndSession}
+        onLanguageChange={handleLanguageChange}
+        onRun={handleRun}
+        onToggleTimer={handleToggleTimer}
+        onLockRoom={handleLockRoom}
+        onEndSession={handleEndSession}
+        onExitRoom={handleExitRoom}
+        onOpenShare={() => setShareOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
 
       {joinPromptOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/95 p-4">
@@ -600,260 +457,48 @@ export function RoomPageInner({ params }: RoomPageProps) {
       )}
 
       <section className="mx-auto grid w-full max-w-425 flex-1 gap-3 p-3 md:grid-cols-[1fr_340px]">
-        <div className="flex flex-col rounded-xl border border-zinc-800 bg-zinc-900">
+        <EditorPanel
+          language={language}
+          activeEditorTab={activeEditorTab}
+          code={code}
+          notes={notes}
+          editorSettings={editorSettings}
+          isReadOnly={isReadOnly}
+          running={running}
+          timeLeft={timeLeft}
+          onActiveEditorTabChange={setActiveEditorTab}
+          onLanguageChange={handleLanguageChange}
+          onRun={handleRun}
+          onCodeChange={setCode}
+          onNotesChange={handleNotesChange}
+          onEditorMount={handleEditorMount}
+        />
 
-          <div className="flex items-end gap-1 border-b border-zinc-800 bg-zinc-900/80 px-3 pt-2">
-           {([
-             { key: "solution", label: LANGUAGE_EXTENSION[language] },
-             { key: "notes", label: "notes.md" },
-           ] as const).map(({ key, label }) => (
-             <div
-               key={key}
-               onClick={() => setActiveEditorTab(key)}
-               className={`cursor-pointer rounded-t-md border border-zinc-700 px-3 py-1.5 text-xs ${
-                 activeEditorTab === key
-                   ? "border-b-zinc-950 bg-zinc-950 text-zinc-200"
-                   : "border-b-transparent bg-zinc-900 text-zinc-500 hover:text-zinc-300"
-               }`}
-             >
-               {label}
-             </div>
-           ))}
-         </div>
-
-          <div className="flex flex-wrap gap-2 border-b border-zinc-800 px-3 py-2 lg:hidden">
-            <select
-              value={language}
-              disabled={isReadOnly}
-              onChange={(event) => handleLanguageChange(event.target.value)}
-              className="h-8 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-300 outline-none disabled:opacity-50"
-            >
-              {LANGUAGE_LABELS.map((lang) => (
-                <option key={lang} value={LANGUAGE_VALUE_BY_LABEL[lang]}>
-                  {lang}
-                </option>
-              ))}
-            </select>
-            <Button
-              size="sm"
-              onClick={handleRun}
-              disabled={running || isReadOnly}
-              className="h-8 cursor-pointer bg-emerald-400 text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
-            >
-              <Play className="size-3.5" />
-              {running ? "Running..." : "Run"}
-            </Button>
-             <span className={`inline-flex h-8 items-center rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs ${
-              timeLeft !== null && timeLeft <= 300 ? "text-red-400" : "text-amber-300"
-               }`}>
-              {timeLeft !== null ? formatTime(timeLeft) : "--:--"}
-            </span>
-          </div>
-
-          <div className="h-[75vh] overflow-hidden bg-zinc-950">
-            {activeEditorTab === "solution" ? (
-              <MonacoEditor
-                language={language}
-                value={code}
-                settings={editorSettings}
-                readOnly={isReadOnly}
-                onChange={(value) => {
-                  setCode(value ?? "")
-                }}
-                onMount={handleEditorMount}
-              />
-              ) : (
-              <textarea
-                value={notes}
-                readOnly={isReadOnly}
-                onChange={(e) => {
-                  setNotes(e.target.value)
-                  socket?.emit("notes:update", { roomId, notes: e.target.value })
-                }}
-                // ref={notesRef}
-                placeholder="Shared scratchpad — paste problem statement, links, or ideas here..."
-                className="h-full w-full resize-none bg-zinc-950 p-4 font-mono text-xs text-zinc-200 outline-none placeholder:text-zinc-600"
-              />
-            )}
-          </div>
-
-          {/* <div className="flex items-center justify-between border-t border-zinc-800 px-3 py-1">
-            <div className="flex items-center gap-2 text-md text-zinc-500">
-              <Users className="size-4" />
-              {participants.length} participant{participants.length === 1 ? "" : "s"} online
-            </div>
-          </div> */}
-        </div>
-
-        <aside className="grid min-h-[75vh] grid-rows-[auto_1fr_auto] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
-          <div className="grid grid-cols-3 border-b border-zinc-800 text-center text-xs">
-            <button
-              type="button"
-              className={`cursor-pointer px-2 py-2 ${activeTab === "output" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
-              onClick={() => setActiveTab("output")}
-            >
-              Output
-            </button>
-            <button
-              type="button"
-              className={`cursor-pointer px-2 py-2 ${activeTab === "chat" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
-              onClick={() => setActiveTab("chat")}
-            >
-              Chat
-            </button>
-            <button
-              type="button"
-              className={`cursor-pointer px-2 py-2 ${activeTab === "replay" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
-              onClick={() => setActiveTab("replay")}
-            >
-              Replay
-            </button>
-          </div>
-
-          <div className="overflow-hidden p-3">
-            {activeTab === "output" ? (
-              <TerminalPanel
-                result={result}
-                running={running}
-                stdin={stdin}
-                onStdinChange={setStdin}
-              />
-            ) : activeTab === "chat" ? (
-              <div className="flex h-full flex-col gap-3">
-                <div className="space-y-3 overflow-auto pr-1">
-                  {chatMessages.length > 0 ? (
-                    chatMessages.map((message, index) => (
-                      <div key={`${message.timestamp}-${index}`} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs">
-                        <div className="mb-1 flex items-center gap-2 text-[11px] text-zinc-500">
-                          <span className="font-semibold text-zinc-100">{message.user}</span>
-                          <span className="rounded-full bg-zinc-800 px-2 py-0.5">{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                        <p className="text-zinc-200">{message.text}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-zinc-500">No chat messages yet. Start the conversation below.</p>
-                  )}
-                </div>
-                <form onSubmit={handleSendChat} className="flex gap-2">
-                  <input
-                    value={chatInput}
-                    onChange={(event) => setChatInput(event.target.value)}
-                    placeholder="Type a message..."
-                    className="flex-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
-                  />
-                  <Button type="submit" className="h-10 px-4 bg-blue-500 text-white hover:bg-blue-400 focus-visible:ring-blue-400">
-                    Send
-                  </Button>
-                </form>
-              </div>
-            ) : (
-              <div className="flex h-full flex-col">
-                {/* Session Stats Bar */}
-                <div className="mb-4 flex flex-wrap gap-2">
-                  {[
-                    { icon: Activity, label: formatTime(elapsedTime) },
-                    { icon: Users, label: participants.length },
-                    { icon: Terminal, label: codeRunCount },
-                    { icon: Braces, label: languageLabel },
-                  ].map((stat, i) => (
-                    <div key={i} className="flex items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
-                      <stat.icon className="size-3" />
-                      {stat.label}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Activity Feed */}
-                <div className="flex-1 space-y-4 overflow-y-auto pr-1">
-                  {sessionEvents.length > 0 ? (
-                    sessionEvents.map((event) => (
-                      <div key={event.id} className="flex items-start gap-3 text-xs">
-                        <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded bg-zinc-800 border border-zinc-700">
-                          {event.type === "join" && <UserPlus className="size-3 text-emerald-400" />}
-                          {event.type === "leave" && <UserMinus className="size-3 text-red-400" />}
-                          {event.type === "run" && <Play className="size-3 text-blue-400 fill-current" />}
-                          {event.type === "language_change" && <Code2 className="size-3 text-amber-400" />}
-                          {event.type === "chat" && <MessageSquareText className="size-3 text-zinc-400" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-zinc-300">
-                            <span className="font-semibold" style={{ color: event.color }}>{event.user}</span>
-                            {" "}{event.description}
-                          </p>
-                          <span className="text-[10px] text-zinc-500">{getRelativeTime(event.timestamp)}</span>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="flex h-full flex-col items-center justify-center text-center text-zinc-600">
-                      <Activity className="mb-2 size-8 opacity-20" />
-                      <p>No activity yet — start coding!</p>
-                    </div>
-                  )}
-                  <div ref={activityEndRef} />
-                </div>
-
-                {/* Session Controls */}
-                <div className="mt-4 pt-4 border-t border-zinc-800" />
-              </div>
-            )}
-          </div>
-
-          <div className="border-t border-zinc-800 p-3">
-            <p className="mb-2 text-[10px] uppercase tracking-wide text-zinc-500">Participants</p>
-            <div className="space-y-2 text-xs">
-              {participants.map((p) => {
-                const showHostActions = isHost && p.id !== socket?.id && p.role !== "host"
-
-                return (
-                  <div key={p.id} className="flex flex-wrap items-center gap-2">
-                    <span
-                      className="flex size-6 items-center justify-center rounded-full text-[10px] font-semibold text-zinc-100"
-                      style={{ backgroundColor: p.color }}
-                    >
-                      {p.name.charAt(0).toUpperCase()}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-zinc-200 truncate">
-                        {p.name}
-                        {p.id === socket?.id && (
-                          <span className="ml-1 text-zinc-500">(you)</span>
-                        )}
-                      </p>
-                      <p className="text-[11px] leading-tight text-emerald-500">
-                        online
-                      </p>
-                    </div>
-                    <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">
-                      {p.role}
-                    </span>
-                    {showHostActions && (
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={p.role}
-                          onChange={(event) => handleRoleChange(p.id, event.target.value as "editor" | "viewer")}
-                          className="h-8 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-[11px] text-zinc-200 outline-none"
-                        >
-                          <option value="editor">Editor</option>
-                          <option value="viewer">Viewer</option>
-                        </select>
-                        <Button
-                          size="xs"
-                          variant="destructive"
-                          onClick={() => handleKickParticipant(p.id)}
-                        >
-                          Kick
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </aside>
+        <RightPanel
+          activeTab={activeTab}
+          onActiveTabChange={setActiveTab}
+          result={result}
+          running={running}
+          stdin={stdin}
+          onStdinChange={setStdin}
+          chatMessages={chatMessages}
+          chatInput={chatInput}
+          onChatInputChange={setChatInput}
+          onSendChat={handleSendChat}
+          elapsedTime={elapsedTime}
+          participants={participants}
+          codeRunCount={codeRunCount}
+          languageLabel={languageLabel}
+          sessionEvents={sessionEvents}
+          activityEndRef={activityEndRef}
+          getRelativeTime={getRelativeTime}
+          isHost={isHost}
+          currentSocketId={socket?.id}
+          onRoleChange={handleRoleChange}
+          onKickParticipant={handleKickParticipant}
+        />
       </section>
+
       {shareOpen && (
         <ShareModal
           roomId={roomId}
