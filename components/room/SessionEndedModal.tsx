@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Copy, Check, Home, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
@@ -12,10 +12,14 @@ interface SessionEndedModalProps {
 
 export default function SessionEndedModal({ replayId, onClose }: SessionEndedModalProps) {
   const [copied, setCopied] = useState(false)
+  const [replayUrl, setReplayUrl] = useState("")
   const router = useRouter()
-  const replayUrl = typeof window !== "undefined" && replayId 
-    ? `${window.location.origin}/replay/${replayId}` 
-    : ""
+
+  useEffect(() => {
+    if (replayId) {
+      setReplayUrl(`${window.location.origin}/replay/${replayId}`)
+    }
+  }, [replayId])
 
   const copyReplayUrl = async () => {
     if (!replayUrl) return

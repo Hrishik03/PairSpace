@@ -26,21 +26,35 @@ export default function Home() {
 
   const handleCreateRoom = async () => {
     setLoading(true)
-    const res = await fetch("/api/room", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: roomName || undefined,
-        maxParticipants: Number(maxParticipants),
-        durationMinutes: Number(roomDuration),
-        language: selectedLanguage,
-      }),
-    })
-    const { roomId, creatorToken } = await res.json()
-    localStorage.setItem("creatorToken", creatorToken)
-    localStorage.setItem("userName", name.trim())
-    setDialogOpen(false)
-    router.push(`/room/${roomId}`)
+    try {
+      const res = await fetch("/api/room", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: roomName || undefined,
+          maxParticipants: Number(maxParticipants),
+          durationMinutes: Number(roomDuration),
+          language: selectedLanguage,
+        }),
+      })
+
+      if (!res.ok) {
+        console.error("Failed to create room:", res.status, await res.text())
+        alert("Failed to create room. Try restarting the dev server (stop npm run dev, delete .next, then run npm run dev again).")
+        return
+      }
+
+      const { roomId, creatorToken } = await res.json()
+      localStorage.setItem("creatorToken", creatorToken)
+      localStorage.setItem("userName", name.trim())
+      setDialogOpen(false)
+      router.push(`/room/${roomId}`)
+    } catch (error) {
+      console.error("Failed to create room:", error)
+      alert("Failed to create room. Please check your connection and try again.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleJoinRoom = () => {

@@ -20,7 +20,7 @@ export default function ReplayLoading() {
           <div className="h-2 w-full animate-pulse rounded-full bg-zinc-800" />
           <div className="relative mt-2 h-2 flex gap-1">
             {[...Array(10)].map((_, i) => (
-              <div key={i} className="h-2 w-1 rounded-full bg-zinc-800 animate-pulse" style={{ marginLeft: `${Math.random() * 8}%` }} />
+              <div key={i} className="h-2 w-1 rounded-full bg-zinc-800 animate-pulse" style={{ marginLeft: `${i * 0.8}%` }} />
             ))}
           </div>
         </div>

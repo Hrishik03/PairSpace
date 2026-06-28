@@ -54,6 +54,11 @@ export default function ReplayPage() {
   const [playing, setPlaying] = useState(false)
 
   const [replayError, setReplayError] = useState<Error | null>(null)
+  const [replayLink, setReplayLink] = useState("")
+
+  useEffect(() => {
+    setReplayLink(window.location.href)
+  }, [])
 
   useEffect(() => {
     fetch(`/api/replay/${id}`)
@@ -218,10 +223,10 @@ export default function ReplayPage() {
         <div className="mt-4 flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
           <span className="text-xs text-zinc-400">Replay link:</span>
           <span className="flex-1 font-mono text-xs text-blue-400">
-            {typeof window !== "undefined" ? window.location.href : ""}
+            {replayLink}
           </span>
           <button
-            onClick={() => navigator.clipboard.writeText(window.location.href)}
+            onClick={() => navigator.clipboard.writeText(replayLink)}
             className="rounded-md bg-blue-500 px-3 py-1.5 text-xs text-white hover:bg-blue-600"
           >
             Copy
