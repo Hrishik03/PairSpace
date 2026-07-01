@@ -81,9 +81,9 @@ export function RoomPageInner({ params }: RoomPageProps) {
   const languageLabel =
     LANGUAGE_LABELS.find((label) => LANGUAGE_VALUE_BY_LABEL[label] === metadata.language) ??
     metadata.language
-  const userNameForYjs = join.userName || "anonymous"
+  const userNameForYjs = join.userName
 
-  const { bindEditor } = useYjs({
+  const { bindEditor, isSynced } = useYjs({
     roomId,
     language: metadata.language,
     userName: userNameForYjs,
@@ -145,6 +145,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
           timeLeft={metadata.timeLeft}
           timerRunning={room.timerRunning}
           isHost={isHost}
+          isSynced={isSynced}
           onActiveEditorTabChange={setActiveEditorTab}
           onLanguageChange={room.handleLanguageChange}
           onRun={execution.handleRun}

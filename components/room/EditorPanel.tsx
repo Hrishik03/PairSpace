@@ -23,6 +23,7 @@ type EditorPanelProps = {
   timeLeft: number | null
   timerRunning: boolean
   isHost: boolean
+  isSynced: boolean
   onActiveEditorTabChange: (tab: "solution" | "notes") => void
   onLanguageChange: (language: string) => void
   onRun: () => void
@@ -43,6 +44,7 @@ export default function EditorPanel({
   timeLeft,
   timerRunning,
   isHost,
+  isSynced,
   onActiveEditorTabChange,
   onLanguageChange,
   onRun,
@@ -115,30 +117,37 @@ export default function EditorPanel({
         )}
       </div>
 
-      <div className="h-[75vh] overflow-hidden bg-zinc-950">
-        {activeEditorTab === "solution" ? (
-          <MonacoEditor
-            language={language}
-            value={code}
-            settings={editorSettings}
-            readOnly={isReadOnly}
-            onChange={(value) => {
-              onCodeChange(value ?? "")
-            }}
-            onMount={onEditorMount}
-          />
-          ) : (
-          <textarea
-            value={notes}
-            readOnly={isReadOnly}
-            onChange={(e) => {
-              onNotesChange(e.target.value)
-            }}
-            // ref={notesRef}
-            placeholder="Shared scratchpad â€” paste problem statement, links, or ideas here..."
-            className="h-full w-full resize-none bg-zinc-950 p-4 font-mono text-xs text-zinc-200 outline-none placeholder:text-zinc-600"
-          />
+      <div className="relative h-[75vh] overflow-hidden bg-zinc-950">
+        {!isSynced && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-950">
+            <span className="animate-pulse text-xs text-zinc-500">Connecting to room...</span>
+          </div>
         )}
+        <div className={isSynced ? "h-full" : "invisible h-full"}>
+          {activeEditorTab === "solution" ? (
+            <MonacoEditor
+              language={language}
+              value={code}
+              settings={editorSettings}
+              readOnly={isReadOnly}
+              onChange={(value) => {
+                onCodeChange(value ?? "")
+              }}
+              onMount={onEditorMount}
+            />
+            ) : (
+            <textarea
+              value={notes}
+              readOnly={isReadOnly}
+              onChange={(e) => {
+                onNotesChange(e.target.value)
+              }}
+              // ref={notesRef}
+              placeholder="Shared scratchpad â€” paste problem statement, links, or ideas here..."
+              className="h-full w-full resize-none bg-zinc-950 p-4 font-mono text-xs text-zinc-200 outline-none placeholder:text-zinc-600"
+            />
+          )}
+        </div>
       </div>
 
       {/* <div className="flex items-center justify-between border-t border-zinc-800 px-3 py-1">

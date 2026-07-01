@@ -72,7 +72,7 @@ export default function Home() {
         <header className="mb-10">
           <div className="relative inline-flex items-center justify-center">
             <span className="pointer-events-none absolute -inset-x-10 -inset-y-4 rounded-full bg-[radial-gradient(circle,rgba(96,165,250,0.28),transparent_65%)] blur-xl" />
-            <h2 className="font-heading relative text-3xl font-semibold tracking-tight md:text-4xl">
+            <h2 className="font-heading relative text-4xl font-semibold tracking-tight md:text-5xl">
               <span className="bg-linear-to-r from-zinc-100 via-blue-300 to-violet-300 bg-clip-text text-transparent drop-shadow-[0_0_16px_rgba(96,165,250,0.3)]">
                 PairSpace
               </span>
@@ -81,7 +81,7 @@ export default function Home() {
         </header>
 
         <div className="w-full max-w-3xl rounded-3xl border border-zinc-800 bg-zinc-900/80 p-8 text-center shadow-[0_0_80px_rgba(59,130,246,0.12)] backdrop-blur md:p-12">
-          <h1 className="font-heading text-4xl font-semibold tracking-tight text-zinc-50 md:text-7xl md:leading-[1.05]">
+          <h1 className="font-heading text-3xl font-semibold tracking-tight text-zinc-50 md:text-5xl md:leading-[1.05]">
             Code together,
             <span className="bg-linear-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
               {" "}instantly.

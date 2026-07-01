@@ -36,8 +36,7 @@ export default function ReplayTab({
 }: ReplayTabProps) {
   return (
     <div className="flex h-full flex-col">
-      {/* Session Stats Bar */}
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="flex-shrink-0 mb-4 flex flex-wrap gap-2">
         {[
           { icon: Activity, label: formatTime(elapsedTime) },
           { icon: Users, label: participantsCount },
@@ -51,8 +50,7 @@ export default function ReplayTab({
         ))}
       </div>
 
-      {/* Activity Feed */}
-      <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+      <div className="flex-1 overflow-y-auto pr-1 space-y-4">
         {sessionEvents.length > 0 ? (
           sessionEvents.map((event) => (
             <div key={event.id} className="flex items-start gap-3 text-xs">
@@ -81,8 +79,7 @@ export default function ReplayTab({
         <div ref={activityEndRef} />
       </div>
 
-      {/* Session Controls */}
-      <div className="mt-4 pt-4 border-t border-zinc-800" />
+      <div className="flex-shrink-0 mt-4 pt-4 border-t border-zinc-800" />
     </div>
   )
 }

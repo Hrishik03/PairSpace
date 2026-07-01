@@ -55,7 +55,7 @@ export default function RightPanel({
   onKickParticipant,
 }: RightPanelProps) {
   return (
-    <aside className="grid min-h-[75vh] grid-rows-[auto_1fr_auto] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
+    <aside className="flex h-[calc(100vh-80px)] flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
       <div className="grid grid-cols-3 border-b border-zinc-800 text-center text-xs">
         <button
           type="button"
@@ -80,7 +80,7 @@ export default function RightPanel({
         </button>
       </div>
 
-      <div className="overflow-hidden p-3">
+      <div className="flex-1 overflow-hidden p-3">
         {activeTab === "output" ? (
           <OutputTab
             result={result}

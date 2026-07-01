@@ -48,11 +48,21 @@ export function useRoomSocket({
   const prevParticipantsRef = useRef<Participant[]>([])
 
   const handleLanguageChange = (newLanguage: string) => {
+    const currentParticipantRole = participants.find((participant) => participant.id === socket?.id)?.role
+    if (currentParticipantRole !== "host") return
+
     const nextCode = CODE_TEMPLATE_BY_LANGUAGE[newLanguage] ?? ""
+    const creatorToken = getCreatorToken() ?? ""
+
     setLanguage(newLanguage)
     localStorage.setItem(`language-${roomId}`, newLanguage)
     setCode(nextCode)
-    socket?.emit("language:change", { roomId, language: newLanguage, code: nextCode })
+    socket?.emit("language:change", {
+      roomId,
+      language: newLanguage,
+      code: nextCode,
+      creatorToken,
+    })
   }
 
   const handleSendChat = (

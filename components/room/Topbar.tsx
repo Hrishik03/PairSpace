@@ -63,9 +63,18 @@ export default function Topbar({
         <div className="mx-auto hidden items-center gap-2 lg:flex">
           <select
             value={language}
-            disabled={isReadOnly}
-            onChange={(event) => onLanguageChange(event.target.value)}
-            className="h-8 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-300 outline-none disabled:opacity-50"
+            disabled={myParticipant?.role !== "host"}
+            title={myParticipant?.role !== "host" ? "Only the host can change the language" : undefined}
+            onChange={(event) => {
+              if (myParticipant?.role === "host") {
+                onLanguageChange(event.target.value)
+              }
+            }}
+            className={`h-8 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-300 outline-none ${
+              myParticipant?.role !== "host"
+                ? "cursor-not-allowed opacity-50"
+                : "cursor-pointer"
+            }`}
           >
             {LANGUAGE_LABELS.map((lang) => (
               <option key={lang} value={LANGUAGE_VALUE_BY_LABEL[lang]}>

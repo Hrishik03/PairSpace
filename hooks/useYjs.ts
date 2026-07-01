@@ -1,7 +1,28 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import type * as Monaco from "monaco-editor"
+import { CODE_TEMPLATE_BY_LANGUAGE } from "@/lib/editor-config"
+
+type AwarenessUser = {
+  name: string
+  color: string
+  colorLight?: string
+}
+
+type AwarenessState = {
+  user?: AwarenessUser
+}
+
+type ProviderLike = {
+  awareness: {
+    setLocalStateField: (field: string, value: AwarenessUser) => void
+    getStates: () => Map<number, AwarenessState>
+    on: (event: string, callback: () => void) => void
+  }
+  once: (event: string, callback: (synced: boolean) => void) => void
+  destroy: () => void
+}
 
 interface UseYjsProps {
   roomId: string
@@ -10,14 +31,22 @@ interface UseYjsProps {
   userColor: string
 }
 
-export function useYjs({ roomId, userName, userColor }: UseYjsProps) {
+export function useYjs({ roomId, language, userName, userColor }: UseYjsProps) {
   const bindingRef = useRef<unknown>(null)
   const providerRef = useRef<unknown>(null)
   const ydocRef = useRef<unknown>(null)
+  const languageRef = useRef(language)
+  const [isSynced, setIsSynced] = useState(false)
 
   useEffect(() => {
-    if (providerRef.current && (providerRef.current as any).awareness) {
-      const provider = providerRef.current as any
+    languageRef.current = language
+  }, [language])
+
+  useEffect(() => {
+    if (!userName) return
+
+    if (providerRef.current && (providerRef.current as ProviderLike | null)?.awareness) {
+      const provider = providerRef.current as ProviderLike
       provider.awareness.setLocalStateField("user", {
         name: userName,
         color: userColor,
@@ -47,17 +76,36 @@ export function useYjs({ roomId, userName, userColor }: UseYjsProps) {
     const ydoc = new Y.Doc()
     const ytext = ydoc.getText("monaco")
 
+    setIsSynced(false)
+
     const provider = new WebsocketProvider(
       "ws://localhost:3001/yjs",
       roomId,
       ydoc
     )
 
-    provider.awareness.setLocalStateField("user", {
-      name: userName,
-      color: userColor,
-      colorLight: userColor + "33",
+    provider.once("sync", (synced: boolean) => {
+      setIsSynced(synced)
+      if (synced && ytext.length === 0) {
+        const currentEditorValue = editor.getModel()?.getValue() ?? ""
+        const boilerplate =
+          currentEditorValue.trim().length > 0
+            ? currentEditorValue
+            : CODE_TEMPLATE_BY_LANGUAGE[languageRef.current] ?? ""
+
+        if (boilerplate) {
+          ydoc.transact(() => ytext.insert(0, boilerplate))
+        }
+      }
     })
+
+    if (userName) {
+      provider.awareness.setLocalStateField("user", {
+        name: userName,
+        color: userColor,
+        colorLight: userColor + "33",
+      })
+    }
 
     const styleEl = document.createElement("style")
     styleEl.id = "yjs-cursor-styles"
@@ -93,7 +141,7 @@ export function useYjs({ roomId, userName, userColor }: UseYjsProps) {
         }
       `
 
-      states.forEach((state: any, clientID: number) => {
+      states.forEach((state, clientID) => {
         if (clientID === ydoc.clientID) return
         if (state.user) {
           const { color, name } = state.user
@@ -180,5 +228,5 @@ export function useYjs({ roomId, userName, userColor }: UseYjsProps) {
     }
   }, [])
 
-  return { bindEditor }
+  return { bindEditor, isSynced }
 }

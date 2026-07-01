@@ -209,15 +209,14 @@ io.on("connection", (socket) => {
   })
 
   // ── Language change ──
-  socket.on("language:change", ({ roomId, language, code }) => {
+  socket.on("language:change", ({ roomId, language, code, creatorToken }) => {
     const room = rooms.get(roomId)
-    const participant = room?.participants.get(socket.id)
-    if (!participant || participant.role === "viewer") return
+    if (!room) return
+    if (room.creatorToken !== creatorToken) return
 
+    const participant = room.participants.get(socket.id)
+    logEvent(roomId, "language_change", participant?.name ?? "unknown", { language })
     setSessionLanguage(roomId, language)
-    logEvent(roomId, "language_change", participant.name, {
-      language,
-    })
     socket.to(roomId).emit("language:changed", { language, code })
   })
 
