@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useState, type FormEvent } from "react"
+import { use, useState, type FormEvent, useEffect } from "react"
 import type { editor } from "monaco-editor"
 import { useRouter } from "next/navigation"
 import EditorPanel from "@/components/room/EditorPanel"
@@ -40,6 +40,8 @@ export function RoomPageInner({ params }: RoomPageProps) {
   const [activeEditorTab, setActiveEditorTab] = useState<"solution" | "notes">("solution")
   const [shareOpen, setShareOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [unseenChatCount, setUnseenChatCount] = useState(0)
+  const [lastReadMessageCount, setLastReadMessageCount] = useState(0)
 
   const activity = useSessionActivity(activeTab)
 
@@ -57,6 +59,19 @@ export function RoomPageInner({ params }: RoomPageProps) {
     appendSessionEvent: activity.appendSessionEvent,
     incrementCodeRunCount: activity.incrementCodeRunCount,
   })
+
+  // Track unseen messages and mark as read when entering chat tab
+  useEffect(() => {
+    if (activeTab === "chat") {
+      // Mark all current messages as read
+      setUnseenChatCount(0)
+      setLastReadMessageCount(room.chatMessages.length)
+    } else if (room.chatMessages.length > lastReadMessageCount) {
+      // Only increment for new messages beyond what was last read
+      const newMessageCount = room.chatMessages.length - lastReadMessageCount
+      setUnseenChatCount(newMessageCount)
+    }
+  }, [room.chatMessages, activeTab, lastReadMessageCount])
 
   const execution = useCodeExecution({
     socket,
@@ -177,6 +192,7 @@ export function RoomPageInner({ params }: RoomPageProps) {
           currentSocketId={socket?.id}
           onRoleChange={host.handleRoleChange}
           onKickParticipant={host.handleKickParticipant}
+          unseenChatCount={unseenChatCount}
         />
       </section>
 

@@ -150,7 +150,8 @@ io.on("connection", (socket) => {
       return
     }
 
-    const assignedRole = isHost ? "host" : role
+    // Server always determines role - never trust the client's role claim
+    const assignedRole = isHost ? "host" : "editor"
     const color = getAvailableColor(room)
 
     const participant: Participant = {
@@ -217,7 +218,8 @@ io.on("connection", (socket) => {
     const participant = room.participants.get(socket.id)
     logEvent(roomId, "language_change", participant?.name ?? "unknown", { language })
     setSessionLanguage(roomId, language)
-    socket.to(roomId).emit("language:changed", { language, code })
+    // Broadcast to all clients including the host for uniform state
+    io.to(roomId).emit("language:changed", { language, code })
   })
 
   // ── Role change (host only) ──

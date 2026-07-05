@@ -14,6 +14,20 @@ type AwarenessState = {
   user?: AwarenessUser
 }
 
+const DEFAULT_REMOTE_COLOR = "#5b7fff"
+const DEFAULT_REMOTE_COLOR_LIGHT = `${DEFAULT_REMOTE_COLOR}33`
+
+const escapeCssString = (value: string) =>
+  value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, " ")
+
+const safeCursorColor = (color: string | undefined, fallback: string) =>
+  color && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color)
+    ? color
+    : fallback
+
+const withAlpha = (color: string, alpha: string) =>
+  /^#[0-9a-fA-F]{6}$/.test(color) ? `${color}${alpha}` : DEFAULT_REMOTE_COLOR_LIGHT
+
 type ProviderLike = {
   awareness: {
     setLocalStateField: (field: string, value: AwarenessUser) => void
@@ -36,6 +50,7 @@ export function useYjs({ roomId, language, userName, userColor }: UseYjsProps) {
   const providerRef = useRef<unknown>(null)
   const ydocRef = useRef<unknown>(null)
   const languageRef = useRef(language)
+  const boilerplateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [isSynced, setIsSynced] = useState(false)
 
   useEffect(() => {
@@ -72,6 +87,11 @@ export function useYjs({ roomId, language, userName, userColor }: UseYjsProps) {
       (ydocRef.current as { destroy: () => void }).destroy()
       ydocRef.current = null
     }
+    // Clear any pending boilerplate timeout
+    if (boilerplateTimeoutRef.current) {
+      clearTimeout(boilerplateTimeoutRef.current)
+      boilerplateTimeoutRef.current = null
+    }
 
     const ydoc = new Y.Doc()
     const ytext = ydoc.getText("monaco")
@@ -84,21 +104,7 @@ export function useYjs({ roomId, language, userName, userColor }: UseYjsProps) {
       ydoc
     )
 
-    provider.once("sync", (synced: boolean) => {
-      setIsSynced(synced)
-      if (synced && ytext.length === 0) {
-        const currentEditorValue = editor.getModel()?.getValue() ?? ""
-        const boilerplate =
-          currentEditorValue.trim().length > 0
-            ? currentEditorValue
-            : CODE_TEMPLATE_BY_LANGUAGE[languageRef.current] ?? ""
-
-        if (boilerplate) {
-          ydoc.transact(() => ytext.insert(0, boilerplate))
-        }
-      }
-    })
-
+    // Set awareness state immediately so it gets broadcast
     if (userName) {
       provider.awareness.setLocalStateField("user", {
         name: userName,
@@ -107,56 +113,88 @@ export function useYjs({ roomId, language, userName, userColor }: UseYjsProps) {
       })
     }
 
-    const styleEl = document.createElement("style")
-    styleEl.id = "yjs-cursor-styles"
-    editor.getDomNode()?.appendChild(styleEl)
+    provider.once("sync", (synced: boolean) => {
+      setIsSynced(synced)
+      if (synced) {
+        // Wait a moment for other clients' updates to arrive in the shared state
+        boilerplateTimeoutRef.current = setTimeout(() => {
+          if (ytext.length === 0) {
+            const currentEditorValue = editor.getModel()?.getValue() ?? ""
+            const boilerplate =
+              currentEditorValue.trim().length > 0
+                ? currentEditorValue
+                : CODE_TEMPLATE_BY_LANGUAGE[languageRef.current] ?? ""
+
+            if (boilerplate) {
+              ydoc.transact(() => ytext.insert(0, boilerplate))
+            }
+          }
+          boilerplateTimeoutRef.current = null
+        }, 300)
+      }
+    })
+
+    // Use document head for styles to avoid DOM issues
+    let styleEl = document.getElementById("yjs-cursor-styles") as HTMLStyleElement | null
+    if (!styleEl) {
+      styleEl = document.createElement("style")
+      styleEl.id = "yjs-cursor-styles"
+      document.head.appendChild(styleEl)
+    }
 
     const updateStyles = () => {
       const states = provider.awareness.getStates()
       let css = `
         .yRemoteSelection {
-          background-color: var(--remote-color-light, #5b7fff33) !important;
+          background-color: var(--remote-color-light, ${DEFAULT_REMOTE_COLOR_LIGHT}) !important;
         }
         .yRemoteSelectionHead {
           position: absolute;
-          border-left: 2px solid var(--remote-color, #5b7fff);
-          border-top: 2px solid var(--remote-color, #5b7fff);
+          border-left: 2px solid var(--remote-color, ${DEFAULT_REMOTE_COLOR});
           height: 100%;
           box-sizing: border-box;
+          overflow: visible;
+          z-index: 5;
         }
         .yRemoteSelectionHead::after {
-          content: attr(data-user);
+          content: "User";
           position: absolute;
-          top: -1.4em;
-          left: -2px;
-          font-size: 11px;
-          padding: 1px 4px;
-          border-radius: 4px;
+          top: -0.35em;
+          left: 3px;
+          max-width: 120px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          font-size: 10px;
+          line-height: 1.2;
+          padding: 1px 5px;
+          border-radius: 2px;
           font-weight: 600;
           color: white;
           white-space: nowrap;
           pointer-events: none;
-          z-index: 10;
-          background-color: var(--remote-color, #5b7fff) !important;
+          z-index: 100;
+          background-color: var(--remote-color, ${DEFAULT_REMOTE_COLOR}) !important;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+          transform: translateY(-100%);
         }
       `
 
       states.forEach((state, clientID) => {
         if (clientID === ydoc.clientID) return
-        if (state.user) {
-          const { color, name } = state.user
-          const colorLight = state.user.colorLight || color + "33"
-          css += `
-            .yRemoteSelection-${clientID}, 
-            .yRemoteSelectionHead-${clientID} {
-              --remote-color: ${color};
-              --remote-color-light: ${colorLight};
-            }
-            .yRemoteSelectionHead-${clientID}::after {
-              content: "${name}" !important;
-            }
-          `
-        }
+        const color = safeCursorColor(state.user?.color, DEFAULT_REMOTE_COLOR)
+        const colorLight = safeCursorColor(state.user?.colorLight, withAlpha(color, "33"))
+        const label = state.user?.name?.trim() || `User ${clientID}`
+
+        css += `
+          .yRemoteSelection-${clientID}, 
+          .yRemoteSelectionHead-${clientID} {
+            --remote-color: ${color};
+            --remote-color-light: ${colorLight};
+          }
+          .yRemoteSelectionHead-${clientID}::after {
+            content: "${escapeCssString(label)}" !important;
+          }
+        `
       })
       styleEl.innerHTML = css
     }
@@ -176,41 +214,6 @@ export function useYjs({ roomId, language, userName, userColor }: UseYjsProps) {
     bindingRef.current = binding
   }
 
-  // // ── ADD THIS FUNCTION ──
-  // const bindNotes = async (textarea: HTMLTextAreaElement) => {
-  //   const ydoc = ydocRef.current
-  //   if (!ydoc) return
-
-  //   const Y = await import("yjs")
-  //   const yNotes = (ydoc as InstanceType<typeof Y.Doc>).getText("notes")
-
-  //   // yjs → textarea
-  //   const observer = () => {
-  //     const val = yNotes.toString()
-  //     if (textarea.value !== val) textarea.value = val
-  //   }
-  //   yNotes.observe(observer)
-
-  //   // textarea → yjs
-  //   const onInput = () => {
-  //     const newVal = textarea.value
-  //     const current = yNotes.toString()
-  //     if (newVal !== current) {
-  //       ;(ydoc as InstanceType<typeof Y.Doc>).transact(() => {
-  //         yNotes.delete(0, yNotes.length)
-  //         yNotes.insert(0, newVal)
-  //       })
-  //     }
-  //   }
-  //   textarea.addEventListener("input", onInput)
-
-  //   // cleanup stored on textarea element for later
-  //   ;(textarea as unknown as Record<string, unknown>)._yjsCleanup = () => {
-  //     yNotes.unobserve(observer)
-  //     textarea.removeEventListener("input", onInput)
-  //   }
-  // }
-
   useEffect(() => {
     return () => {
       if (bindingRef.current) {
@@ -224,6 +227,10 @@ export function useYjs({ roomId, language, userName, userColor }: UseYjsProps) {
       if (ydocRef.current) {
         (ydocRef.current as { destroy: () => void }).destroy()
         ydocRef.current = null
+      }
+      if (boilerplateTimeoutRef.current) {
+        clearTimeout(boilerplateTimeoutRef.current)
+        boilerplateTimeoutRef.current = null
       }
     }
   }, [])

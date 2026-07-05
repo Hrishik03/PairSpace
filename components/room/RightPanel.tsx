@@ -29,6 +29,7 @@ type RightPanelProps = {
   currentSocketId?: string
   onRoleChange: (targetId: string, newRole: "editor" | "viewer") => void
   onKickParticipant: (targetId: string) => void
+  unseenChatCount?: number
 }
 
 export default function RightPanel({
@@ -53,27 +54,33 @@ export default function RightPanel({
   currentSocketId,
   onRoleChange,
   onKickParticipant,
+  unseenChatCount = 0,
 }: RightPanelProps) {
   return (
     <aside className="flex h-[calc(100vh-80px)] flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
       <div className="grid grid-cols-3 border-b border-zinc-800 text-center text-xs">
         <button
           type="button"
-          className={`cursor-pointer px-2 py-2 ${activeTab === "output" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
+          className={`flex cursor-pointer items-center justify-center px-2 py-2 ${activeTab === "output" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
           onClick={() => onActiveTabChange("output")}
         >
           Output
         </button>
         <button
           type="button"
-          className={`cursor-pointer px-2 py-2 ${activeTab === "chat" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
+          className={`flex cursor-pointer items-center justify-center gap-1 px-2 py-2 ${activeTab === "chat" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
           onClick={() => onActiveTabChange("chat")}
         >
           Chat
+          {unseenChatCount > 0 && (
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[8px] font-bold text-white">
+              {unseenChatCount > 99 ? "99+" : unseenChatCount}
+            </span>
+          )}
         </button>
         <button
           type="button"
-          className={`cursor-pointer px-2 py-2 ${activeTab === "replay" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
+          className={`flex cursor-pointer items-center justify-center px-2 py-2 ${activeTab === "replay" ? "border-b-2 border-blue-400 text-blue-300" : "text-zinc-500"}`}
           onClick={() => onActiveTabChange("replay")}
         >
           Replay

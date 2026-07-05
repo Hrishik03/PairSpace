@@ -56,7 +56,7 @@ export function useRoomSocket({
 
     setLanguage(newLanguage)
     localStorage.setItem(`language-${roomId}`, newLanguage)
-    setCode(nextCode)
+    // Don't call setCode here - let the server broadcast handle it for all clients uniformly
     socket?.emit("language:change", {
       roomId,
       language: newLanguage,
@@ -215,10 +215,6 @@ export function useRoomSocket({
     userName,
     timeLeft === null,
     maxParticipants,
-    setLanguage,
-    setCode,
-    setTimeLeft,
-    setRoomError,
     appendSessionEvent,
     incrementCodeRunCount,
   ])
