@@ -43,6 +43,8 @@ io.on("connection", (socket) => {
   registerTimerHandlers(io, socket, rooms)
 })
 
-httpServer.listen(3001, () => {
-  console.log("ws-server running on port 3001")
+const PORT = process.env.PORT ?? 3001
+
+httpServer.listen(PORT, () => {
+  console.log(`ws-server running on port ${PORT}`)
 })
