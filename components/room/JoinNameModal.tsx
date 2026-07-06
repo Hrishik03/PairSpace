@@ -39,7 +39,7 @@ export default function JoinNameModal({
           {joinError && <p className="text-sm text-red-400">{joinError}</p>}
           <div className="flex justify-end">
             <Button type="submit" disabled={joinLoading} className="h-10">
-              {joinLoading ? <Loader2 className="size-4 animate-spin" /> : "Join room"}
+              {joinLoading ? <Loader2 className="size-4 animate-spin cursor-pointer" /> : "Join room"}
             </Button>
           </div>
         </form>

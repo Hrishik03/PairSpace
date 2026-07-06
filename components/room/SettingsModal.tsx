@@ -98,31 +98,12 @@ export default function SettingsModal({ settings, onUpdate, onClose }: Props) {
               />
             </button>
           </div>
-
-          {/* Keybindings */}
-          <div className="space-y-3">
-            <label className="flex items-center gap-2 text-sm font-medium text-zinc-400">
-              <Keyboard className="size-4" />
-              Keybindings
-            </label>
-            <select
-              value={settings.keybindings}
-              onChange={(e) => onUpdate({ ...settings, keybindings: e.target.value as any })}
-              className="w-full h-10 rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-sm text-zinc-100 outline-none focus:border-blue-500"
-            >
-              <option value="standard">Standard (Default)</option>
-              <option value="vim" disabled>Vim (Coming Soon)</option>
-            </select>
-            <p className="text-[10px] text-zinc-500 italic px-1">
-              * Vim mode requires additional setup.
-            </p>
-          </div>
         </div>
 
         <div className="mt-8">
           <Button 
             onClick={onClose} 
-            className="w-full h-11 bg-zinc-100 text-zinc-950 hover:bg-zinc-200 font-medium rounded-xl"
+            className="w-full h-11 bg-zinc-100 text-zinc-950 hover:bg-zinc-200 font-medium rounded-xl cursor-pointer"
           >
             Save and Close
           </Button>
