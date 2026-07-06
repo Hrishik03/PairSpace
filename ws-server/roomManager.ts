@@ -24,6 +24,7 @@ export type Rooms = Map<string, Room>
 
 export const COLORS = ["#5b7fff", "#ff5e7a", "#ffd166", "#3dffa0", "#a78bfa", "#f97316"]
 export const rooms: Rooms = new Map()
+export const NEXT_APP_URL = (process.env.NEXT_APP_URL ?? "http://localhost:3000").replace(/\/$/, "")
 
 export function createRoom(
   roomId: string,
@@ -75,7 +76,7 @@ export async function saveReplay(roomId: string) {
   const replayId = nanoid(10)
 
   try {
-    await fetch("http://localhost:3000/api/replay", {
+    const response = await fetch(`${NEXT_APP_URL}/api/replay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -86,6 +87,12 @@ export async function saveReplay(roomId: string) {
         log: session.events,
       }),
     })
+
+    if (!response.ok) {
+      const message = await response.text()
+      throw new Error(`Replay API failed with ${response.status}: ${message}`)
+    }
+
     console.log(`Replay saved: ${replayId}`)
     return replayId
   } catch (err) {

@@ -10,10 +10,14 @@ import { registerTimerHandlers } from "./handlers/timerHandlers"
 import { rooms, startRoomTimer } from "./roomManager"
 
 const httpServer = createServer()
+const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGIN ?? "http://localhost:3000")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean)
 
 const io = new Server(httpServer, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: FRONTEND_ORIGINS,
     methods: ["GET", "POST"],
   },
 })

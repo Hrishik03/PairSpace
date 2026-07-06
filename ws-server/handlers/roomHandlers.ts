@@ -5,6 +5,7 @@ import {
   endRoomSession,
   getAvailableColor,
   getOrCreateRoom,
+  NEXT_APP_URL,
   saveReplay,
   type Participant,
   type ParticipantRole,
@@ -57,7 +58,7 @@ export function registerRoomHandlers(io: Server, socket: Socket, rooms: Rooms) {
       broadcastParticipants(io, roomId, room)
       callback?.({ success: true, locked: room.locked, timerRunning: room.timerRunning })
 
-      fetch("http://localhost:3000/api/participant", {
+      fetch(`${NEXT_APP_URL}/api/participant`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
