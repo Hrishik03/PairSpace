@@ -53,7 +53,8 @@
     "strict": false,
     "skipLibCheck": true,
     "noImplicitAny": false,
-    "ignoreDeprecations": "6.0"
+    "ignoreDeprecations": "6.0",
+    "outDir": "./dist"
   },
   "ts-node": {
     "transpileOnly": true
