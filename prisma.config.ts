@@ -3,8 +3,6 @@
 import "dotenv/config"
 import { defineConfig, env } from "prisma/config"
 
-console.log("DATABASE_URL:", process.env.DATABASE_URL) // add this
-
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {

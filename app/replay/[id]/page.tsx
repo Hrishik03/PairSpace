@@ -54,11 +54,7 @@ export default function ReplayPage() {
   const [playing, setPlaying] = useState(false)
 
   const [replayError, setReplayError] = useState<Error | null>(null)
-  const [replayLink, setReplayLink] = useState("")
-
-  useEffect(() => {
-    setReplayLink(window.location.href)
-  }, [])
+  const replayLink = typeof window !== "undefined" ? window.location.href : ""
 
   useEffect(() => {
     fetch(`/api/replay/${id}`)
@@ -95,9 +91,13 @@ export default function ReplayPage() {
     return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
   }
 
-  const visibleEvents = replay?.log.filter(e => e.t <= currentTime) ?? []
-
   if (loading) return null
+  if (!replay) {
+    throw new Error("Replay not found")
+  }
+
+  const replayData = replay
+  const visibleEvents = replayData.log.filter(e => e.t <= currentTime)
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -110,7 +110,7 @@ export default function ReplayPage() {
         <span className="text-zinc-500">·</span>
         <span className="text-xs text-zinc-400">Session Replay</span>
         <span className="ml-auto text-xs text-zinc-500">
-          {new Date(replay.createdAt).toLocaleDateString()}
+          {new Date(replayData.createdAt).toLocaleDateString()}
         </span>
       </header>
 
@@ -126,7 +126,7 @@ export default function ReplayPage() {
             </button>
             <span className="font-mono text-sm text-zinc-300">
               {formatTime(currentTime)}
-              <span className="text-zinc-500"> / {formatTime(replay.durationS)}</span>
+              <span className="text-zinc-500"> / {formatTime(replayData.durationS)}</span>
             </span>
             <button
               onClick={() => { setCurrentTime(0); setPlaying(false) }}
@@ -138,7 +138,7 @@ export default function ReplayPage() {
           <input
             type="range"
             min={0}
-            max={replay.durationS}
+            max={replayData.durationS}
             value={currentTime}
             onChange={e => {
               setCurrentTime(Number(e.target.value))
@@ -148,12 +148,12 @@ export default function ReplayPage() {
           />
           {/* Event markers */}
           <div className="relative mt-2 h-2">
-            {replay.log.map((event, i) => (
+            {replayData.log.map((event, i) => (
               <div
                 key={i}
                 onClick={() => setCurrentTime(event.t)}
                 title={`${event.type} by ${event.user}`}
-                style={{ left: `${(event.t / replay.durationS) * 100}%` }}
+                style={{ left: `${(event.t / replayData.durationS) * 100}%` }}
                 className={`absolute top-0 h-2 w-1 cursor-pointer rounded-full ${
                   event.type === "run" ? "bg-emerald-400" :
                   event.type === "join" ? "bg-blue-400" :

@@ -1,22 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, JetBrains_Mono, Syne } from "next/font/google";
 import "./globals.css";
-
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
-});
-
-const syne = Syne({
-  variable: "--font-syne",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "PairSpace",
@@ -31,7 +14,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${jetbrainsMono.variable} ${syne.variable} h-full antialiased`}
+      className="h-full antialiased"
     >
       <head />
       <body className="min-h-full flex flex-col">{children}</body>

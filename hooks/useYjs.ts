@@ -32,9 +32,17 @@ type YTextLike = {
 
 const DEFAULT_REMOTE_COLOR = "#5b7fff"
 const DEFAULT_REMOTE_COLOR_LIGHT = `${DEFAULT_REMOTE_COLOR}33`
+const WS_SERVER_URL = process.env.NEXT_PUBLIC_WS_SERVER_URL ?? "http://localhost:3001"
 
 const escapeCssString = (value: string) =>
   value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, " ")
+
+const getYjsServerUrl = () => {
+  const url = new URL(WS_SERVER_URL)
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
+  url.pathname = "/yjs"
+  return url.toString()
+}
 
 const safeCursorColor = (color: string | undefined, fallback: string) =>
   color && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color)
@@ -146,7 +154,7 @@ export function useYjs({
     setIsSynced(false)
 
     const provider = new WebsocketProvider(
-      "ws://localhost:3001/yjs",
+      getYjsServerUrl(),
       roomId,
       ydoc
     )

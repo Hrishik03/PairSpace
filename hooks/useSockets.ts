@@ -1,19 +1,20 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { io, Socket } from "socket.io-client"
 
 let socket: Socket | null = null
+const WS_SERVER_URL = process.env.NEXT_PUBLIC_WS_SERVER_URL ?? "http://localhost:3001"
+
+function getSocket() {
+  if (!socket) {
+    socket = io(WS_SERVER_URL)
+  }
+  return socket
+}
 
 export function useSocket() {
-  const [socketInstance, setSocketInstance] = useState<Socket | null>(null)
-
-  useEffect(() => {
-    if (!socket) {
-      socket = io("http://localhost:3001")
-    }
-    setSocketInstance(socket)
-  }, [])
+  const [socketInstance] = useState<Socket | null>(() => getSocket())
 
   return socketInstance
 }

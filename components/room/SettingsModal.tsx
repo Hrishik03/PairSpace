@@ -1,6 +1,6 @@
 "use client"
 import React from "react"
-import { X, Type, Palette, WrapText, Keyboard } from "lucide-react"
+import { X, Type, Palette, WrapText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export interface EditorSettings {
