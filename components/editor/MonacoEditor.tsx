@@ -28,7 +28,7 @@ export default function MonacoEditor({ language, value, onChange, onMount, setti
         height="100%"
         theme={settings?.theme ?? "vs-dark"}
         language={language}
-        value={value}
+        defaultValue={value}
         onChange={handleEditorChange}
         onMount={onMount}
         options={{

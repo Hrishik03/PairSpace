@@ -14,6 +14,22 @@ type AwarenessState = {
   user?: AwarenessUser
 }
 
+type AwarenessProviderLike = {
+  awareness: {
+    setLocalStateField: (field: string, value: AwarenessUser) => void
+  }
+}
+
+type YDocLike = {
+  transact: (callback: () => void) => void
+  destroy: () => void
+}
+
+type YTextLike = {
+  length: number
+  insert: (index: number, text: string) => void
+}
+
 const DEFAULT_REMOTE_COLOR = "#5b7fff"
 const DEFAULT_REMOTE_COLOR_LIGHT = `${DEFAULT_REMOTE_COLOR}33`
 
@@ -43,32 +59,65 @@ interface UseYjsProps {
   language: string
   userName: string
   userColor: string
+  shouldInitializeDocument: boolean
 }
 
-export function useYjs({ roomId, language, userName, userColor }: UseYjsProps) {
+export function useYjs({
+  roomId,
+  language,
+  userName,
+  userColor,
+  shouldInitializeDocument,
+}: UseYjsProps) {
   const bindingRef = useRef<unknown>(null)
   const providerRef = useRef<unknown>(null)
-  const ydocRef = useRef<unknown>(null)
+  const ydocRef = useRef<YDocLike | null>(null)
+  const ytextRef = useRef<YTextLike | null>(null)
   const languageRef = useRef(language)
-  const boilerplateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const userNameRef = useRef(userName)
+  const userColorRef = useRef(userColor)
+  const shouldInitializeDocumentRef = useRef(shouldInitializeDocument)
   const [isSynced, setIsSynced] = useState(false)
 
   useEffect(() => {
     languageRef.current = language
   }, [language])
 
-  useEffect(() => {
-    if (!userName) return
+  const initializeEmptyDocument = () => {
+    const ydoc = ydocRef.current
+    const ytext = ytextRef.current
+    if (!shouldInitializeDocumentRef.current || !ydoc || !ytext || ytext.length > 0) return
 
-    if (providerRef.current && (providerRef.current as ProviderLike | null)?.awareness) {
-      const provider = providerRef.current as ProviderLike
-      provider.awareness.setLocalStateField("user", {
-        name: userName,
-        color: userColor,
-        colorLight: userColor + "33",
-      })
+    const boilerplate = CODE_TEMPLATE_BY_LANGUAGE[languageRef.current] ?? ""
+    if (boilerplate) {
+      ydoc.transact(() => ytext.insert(0, boilerplate))
     }
+  }
+
+  const publishLocalUser = (provider: AwarenessProviderLike) => {
+    const name = userNameRef.current.trim()
+    if (!name) return
+
+    const color = safeCursorColor(userColorRef.current, DEFAULT_REMOTE_COLOR)
+    provider.awareness.setLocalStateField("user", {
+      name,
+      color,
+      colorLight: withAlpha(color, "33"),
+    })
+  }
+
+  useEffect(() => {
+    userNameRef.current = userName
+    userColorRef.current = userColor
+
+    const provider = providerRef.current as ProviderLike | null
+    if (provider?.awareness) publishLocalUser(provider)
   }, [userName, userColor])
+
+  useEffect(() => {
+    shouldInitializeDocumentRef.current = shouldInitializeDocument
+    initializeEmptyDocument()
+  }, [shouldInitializeDocument])
 
   const bindEditor = async (editor: Monaco.editor.IStandaloneCodeEditor) => {
     const Y = await import("yjs")
@@ -84,17 +133,15 @@ export function useYjs({ roomId, language, userName, userColor }: UseYjsProps) {
       providerRef.current = null
     }
     if (ydocRef.current) {
-      (ydocRef.current as { destroy: () => void }).destroy()
+      ydocRef.current.destroy()
       ydocRef.current = null
     }
-    // Clear any pending boilerplate timeout
-    if (boilerplateTimeoutRef.current) {
-      clearTimeout(boilerplateTimeoutRef.current)
-      boilerplateTimeoutRef.current = null
-    }
+    ytextRef.current = null
 
     const ydoc = new Y.Doc()
     const ytext = ydoc.getText("monaco")
+    ydocRef.current = ydoc
+    ytextRef.current = ytext
 
     setIsSynced(false)
 
@@ -103,34 +150,16 @@ export function useYjs({ roomId, language, userName, userColor }: UseYjsProps) {
       roomId,
       ydoc
     )
+    providerRef.current = provider
 
-    // Set awareness state immediately so it gets broadcast
-    if (userName) {
-      provider.awareness.setLocalStateField("user", {
-        name: userName,
-        color: userColor,
-        colorLight: userColor + "33",
-      })
-    }
+    publishLocalUser(provider)
+    provider.on("status", () => publishLocalUser(provider))
 
     provider.once("sync", (synced: boolean) => {
       setIsSynced(synced)
+      publishLocalUser(provider)
       if (synced) {
-        // Wait a moment for other clients' updates to arrive in the shared state
-        boilerplateTimeoutRef.current = setTimeout(() => {
-          if (ytext.length === 0) {
-            const currentEditorValue = editor.getModel()?.getValue() ?? ""
-            const boilerplate =
-              currentEditorValue.trim().length > 0
-                ? currentEditorValue
-                : CODE_TEMPLATE_BY_LANGUAGE[languageRef.current] ?? ""
-
-            if (boilerplate) {
-              ydoc.transact(() => ytext.insert(0, boilerplate))
-            }
-          }
-          boilerplateTimeoutRef.current = null
-        }, 300)
+        initializeEmptyDocument()
       }
     })
 
@@ -202,6 +231,10 @@ export function useYjs({ roomId, language, userName, userColor }: UseYjsProps) {
     provider.awareness.on("change", updateStyles)
     updateStyles()
 
+    if (!shouldInitializeDocumentRef.current) {
+      editor.getModel()?.setValue("")
+    }
+
     const binding = new MonacoBinding(
       ytext,
       editor.getModel()!,
@@ -209,8 +242,6 @@ export function useYjs({ roomId, language, userName, userColor }: UseYjsProps) {
       provider.awareness
     )
 
-    ydocRef.current = ydoc
-    providerRef.current = provider
     bindingRef.current = binding
   }
 
@@ -225,13 +256,10 @@ export function useYjs({ roomId, language, userName, userColor }: UseYjsProps) {
         providerRef.current = null
       }
       if (ydocRef.current) {
-        (ydocRef.current as { destroy: () => void }).destroy()
+        ydocRef.current.destroy()
         ydocRef.current = null
       }
-      if (boilerplateTimeoutRef.current) {
-        clearTimeout(boilerplateTimeoutRef.current)
-        boilerplateTimeoutRef.current = null
-      }
+      ytextRef.current = null
     }
   }, [])
 

@@ -45,6 +45,7 @@
 
 {
   "compilerOptions": {
+    "rootDir": ".",
     "target": "ES2020",
     "module": "CommonJS",
     "moduleResolution": "node10",
@@ -56,5 +57,6 @@
   },
   "ts-node": {
     "transpileOnly": true
-  }
+  },
+  "include": ["*.ts", "handlers/**/*.ts"]
 }

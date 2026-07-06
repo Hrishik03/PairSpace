@@ -96,13 +96,14 @@ export function RoomPageInner({ params }: RoomPageProps) {
   const languageLabel =
     LANGUAGE_LABELS.find((label) => LANGUAGE_VALUE_BY_LABEL[label] === metadata.language) ??
     metadata.language
-  const userNameForYjs = join.userName
+  const userNameForYjs = myParticipant?.name ?? join.userName
 
   const { bindEditor, isSynced } = useYjs({
     roomId,
     language: metadata.language,
     userName: userNameForYjs,
     userColor: myParticipant?.color ?? "#5b7fff",
+    shouldInitializeDocument: isHost && room.participants.length === 1,
   })
 
   const handleEditorMount = (monacoEditor: editor.IStandaloneCodeEditor) => {
