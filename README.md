@@ -102,22 +102,51 @@ ONLINE_COMPILER_API_KEY=your_key_here
 
 ```txt
 pairspace/
-├── app/                    # Next.js App Router pages and API routes
-│   ├── room/[roomId]/      # Collaborative editor room
-│   ├── replay/[id]/        # Session replay viewer
-│   ├── join/[roomId]/      # Join page for shared links
-│   └── api/                # REST API routes
+├── app/
+│   ├── room/[roomId]/
+│   │   ├── page.tsx         # Room page — state, socket wiring, handler functions
+│   │   ├── loading.tsx      # Skeleton UI shown while room data loads
+│   │   └── error.tsx        # Error boundary for invalid/expired rooms
+│   ├── replay/[id]/
+│   │   └── page.tsx         # Replay viewer — scrubber, event timeline, share link
+│   ├── join/[roomId]/       # Name entry page for shared invite links
+│   └── api/
+│       ├── room/            # POST create room, GET room config
+│       ├── execute/         # POST proxy to OnlineCompiler API
+│       ├── replay/          # POST save replay, GET fetch replay by ID
+│       └── participant/     # POST save participant to Postgres
 ├── components/
-│   ├── editor/             # Monaco editor component
-│   └── room/               # Topbar, RightPanel, ShareModal etc.
-├── hooks/                  # useSocket, useYjs
-├── lib/                    # Prisma client, editor config, utilities
-├── types/                  # Shared TypeScript types
-├── ws-server/              # Standalone WebSocket + Yjs server
-│   ├── index.ts            # Server entry point
-│   ├── sessionLogger.ts    # Append-only event log
-│   └── handlers/           # Modular socket event handlers
-└── prisma/                 # Schema and migrations
+│   ├── editor/
+│   │   └── MonacoEditor.tsx # Monaco with ssr:false, onMount callback for Yjs binding
+│   └── room/
+│       ├── Topbar.tsx       # Language select, run button, timer, share, settings
+│       ├── EditorPanel.tsx  # Editor tabs, Monaco, notes textarea
+│       ├── RightPanel.tsx   # Output/Chat/Replay tab switcher
+│       ├── OutputTab.tsx    # Execution results, stdin input
+│       ├── ChatTab.tsx      # Chat messages, send form, unread badge
+│       ├── ReplayTab.tsx    # Live event feed, end session, replay link
+│       ├── ParticipantList.tsx  # Avatars, roles, typing/away status
+│       └── ShareModal.tsx   # Room link, editor link, viewer link with copy buttons
+├── hooks/
+│   ├── useSockets.ts        # Socket.IO client singleton
+│   └── useYjs.ts            # Yjs doc, WebSocket provider, Monaco binding
+├── lib/
+│   ├── prisma.ts            # Prisma client singleton with PrismaPg adapter
+│   └── editor-config.ts     # Language maps, code templates, formatTime utility
+├── types/
+│   └── room.ts              # Participant, ExecutionResult, ChatMessage, SessionEvent
+├── ws-server/
+│   ├── index.ts             # HTTP server, Socket.IO, Yjs WebSocket server, upgrade routing
+│   ├── sessionLogger.ts     # In-memory append-only event log per room
+│   ├── roomManager.ts       # Room state Map, participant CRUD
+│   └── handlers/
+│       ├── roomHandlers.ts  # join, disconnect, lock, kick, end session
+│       ├── codeHandlers.ts  # code:run, language:change
+│       ├── chatHandlers.ts  # chat:message with history
+│       └── timerHandlers.ts # pause, resume, sync, user status/typing
+└── prisma/
+    ├── schema.prisma        # Room, Replay, Participant models
+    └── migrations/          # Auto-generated SQL migration history
 ```
 
 ## Deployment
