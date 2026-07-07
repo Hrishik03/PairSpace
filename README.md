@@ -5,7 +5,9 @@ Disposable real-time collaborative coding rooms for interviews and pair programm
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Online-blue)](#)
 [![Made with Next.js](https://img.shields.io/badge/Made%20with-Next.js-black)](https://nextjs.org)
 
-![PairSpace Demo](./public/demo.png)
+## Demo
+
+
 
 ## Overview
 
