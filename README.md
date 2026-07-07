@@ -60,7 +60,7 @@ Prerequisites:
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/your-username/pairspace # replace with your GitHub username
+git clone https://github.com/Hrishik03/pairspace # replace with your GitHub username
 cd pairspace
 
 # 2. Install dependencies
