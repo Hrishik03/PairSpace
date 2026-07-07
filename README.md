@@ -2,7 +2,7 @@
 
 Disposable real-time collaborative coding rooms for interviews and pair programming.
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Online-blue)](#)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Online-blue)](https://pairspace.up.railway.app/)
 [![Made with Next.js](https://img.shields.io/badge/Made%20with-Next.js-black)](https://nextjs.org)
 
 ## Demo
